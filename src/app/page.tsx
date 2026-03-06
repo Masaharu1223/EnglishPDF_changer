@@ -60,7 +60,7 @@ export default function Home() {
         <div className="text-center">
           <h1 className="text-3xl font-bold text-gray-900">
             <RotatingText
-              texts={["Sentence Extractor", "例文エクストラクター"]}
+              texts={["Sentence Extractor", "例文自動生成機"]}
               interval={3000}
             />
           </h1>
@@ -68,7 +68,7 @@ export default function Home() {
             <RotatingText
               texts={[
                 "Upload a PDF or TXT file to extract English sentences with Japanese translations and audio",
-                "PDFまたはTXTファイルをアップロードして、英文の抽出・日本語翻訳・音声再生ができます",
+                "好きなPDFまたはTXTファイルをアップロード。英文の抽出・日本語翻訳・音声再生ができます",
               ]}
               interval={3000}
             />
