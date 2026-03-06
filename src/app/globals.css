@@ -5,3 +5,24 @@
 body {
   background: #f8fafc;
 }
+
+.rotating-text-wrapper {
+  display: inline-block;
+  perspective: 600px;
+}
+
+.rotating-text {
+  display: inline-block;
+  transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
+  transform-origin: center center;
+}
+
+.rotating-text.rotating-out {
+  transform: rotateX(90deg);
+  opacity: 0;
+}
+
+.rotating-text.rotating-in {
+  transform: rotateX(0deg);
+  opacity: 1;
+}

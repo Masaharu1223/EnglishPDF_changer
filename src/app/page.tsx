@@ -3,6 +3,7 @@
 import { useState } from "react";
 import FileUploader from "@/components/FileUploader";
 import SentenceList from "@/components/SentenceList";
+import RotatingText from "@/components/RotatingText";
 import type { Sentence, ProcessingState } from "@/types";
 
 export default function Home() {
@@ -58,10 +59,19 @@ export default function Home() {
       <div className="max-w-3xl mx-auto space-y-8">
         <div className="text-center">
           <h1 className="text-3xl font-bold text-gray-900">
-            Sentence Extractor
+            <RotatingText
+              texts={["Sentence Extractor", "例文エクストラクター"]}
+              interval={3000}
+            />
           </h1>
           <p className="text-gray-500 mt-2">
-            Upload a PDF or TXT file to extract English sentences with Japanese translations and audio
+            <RotatingText
+              texts={[
+                "Upload a PDF or TXT file to extract English sentences with Japanese translations and audio",
+                "PDFまたはTXTファイルをアップロードして、英文の抽出・日本語翻訳・音声再生ができます",
+              ]}
+              interval={3000}
+            />
           </p>
         </div>
 
