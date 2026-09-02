@@ -26,6 +26,7 @@ We'll know we're right when、実際に1時間相当のテキスト(約4.5〜5�
 - **決済機能の実装** - 現状ダミー(`alert()`のみ)のままで、今回のスコープ外
 - **Supabase RLSポリシーの厳格化** - 既知の問題として認識しているが、今回のAPI化・長尺対応とは独立した課題のため別対応とする
 - **英語以外の言語への対応拡大** - 対象は英語教材のみ
+- **ローカルLLM(Ollama)関連の環境変数・設定** - `OLLAMA_BASE_URL`/`OLLAMA_MODEL`および`.env.example`の記載は削除する(Phase 1・4で対応)。ただし機能のアイデア自体を完全に捨てるわけではなく、コスト増加やオフライン対応が必要になった場合の将来の検討事項として、削除するのは今回のスコープでの実装であって発想ではない、という位置づけで残す(下記「将来の検討事項」参照)
 
 ## Success Metrics
 
@@ -41,6 +42,10 @@ We'll know we're right when、実際に1時間相当のテキスト(約4.5〜5�
 - [ ] OpenAI TTSのモデル選定(`tts-1` / `tts-1-hd` / 他)をどれにするか
 - [ ] 逐次処理(現行、`page.tsx` line 71の`for`ループ)のままで長尺コンテンツの完了までの実時間が許容範囲か、限定並列化(例: 同時3〜5チャンク)が必要か。実測してから判断する
 - [ ] 1時間相当のテキストを一度に投入した場合のClaude API側のレート制限(RPM/TPM)に抵触しないか。未確認
+
+## 将来の検討事項(今回は実装しない)
+
+- **ローカルLLM(Ollama)への回帰**: 今回はAPIコストが個人利用では誤差レベルという判断でClaude APIに一本化するが、利用量が増えてコストが無視できなくなった場合や、オフライン環境での利用ニーズが出てきた場合には、ローカルLLMの採用を再検討する余地を残しておく。今回の実装で環境変数・設定は削除するが、アイデアとしては破棄しない。再検討する際は新しいPRDを起こす想定
 
 ## Users & Context
 
@@ -110,7 +115,7 @@ PDF/テキストをアップロード(または文字起こしテキストを貼
 | 1 | LLM層のClaude API化 | `src/lib/llm.ts`のOllama呼び出しをClaude API呼び出しに置換 | pending | with 2 | - | - |
 | 2 | TTS層のOpenAI API化 | `src/lib/elevenlabs.ts`相当をOpenAI TTS API呼び出しに置換 | pending | with 1 | - | - |
 | 3 | 長尺コンテンツ対応の検証・チューニング | 1時間相当(約4.5〜5万文字)のテキストでE2Eテストし、必要なら並列化を実装 | pending | - | 1 | - |
-| 4 | 環境変数・ドキュメント整理 | `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`の設定整理、README更新、Ollama関連コードの扱い(残す/削除)を決定、Issue #2クローズ | pending | - | 1, 2, 3 | - |
+| 4 | 環境変数・ドキュメント整理 | `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`の設定整理、`OLLAMA_*`/`ELEVENLABS_*`の削除、README更新、Issue #2クローズ | pending | - | 1, 2, 3 | - |
 
 ### Phase Details
 
@@ -131,8 +136,8 @@ PDF/テキストをアップロード(または文字起こしテキストを貼
 
 **Phase 4: 環境変数・ドキュメント整理**
 - **Goal**: 移行を完了状態にする
-- **Scope**: `.env.example`更新、README更新(既存のOllama手順を「オフライン用の代替手段」として残すか削除するか判断)、Issue #2のクローズ
-- **Success signal**: 新規に環境構築する人がREADMEだけでClaude API版をセットアップできる
+- **Scope**: `.env.example`から`OLLAMA_BASE_URL`/`OLLAMA_MODEL`/`ELEVENLABS_API_KEY`を削除し、`ANTHROPIC_API_KEY`の誤った「legacy, no longer used」コメントを修正、`OPENAI_API_KEY`を追加。README更新、Issue #2のクローズ
+- **Success signal**: 新規に環境構築する人がREADMEだけでClaude API版をセットアップできる。`.env.example`に実際は使われていない変数が残っていない
 
 ### Parallelism Notes
 
@@ -149,6 +154,7 @@ Phase 1(LLM層)とPhase 2(TTS層)は別ファイル・別APIを扱うため並�
 | YouTube文字起こしの取り込み方法 | 既存のテキスト貼り付け欄を流用 | URL貼り付けで自動字幕取得 | 新規実装コストを避け、v1のスコープを絞るため |
 | 音声生成のタイミング | on-demand(既存方式を維持) | アップロード時に全文一括生成 | 長尺コンテンツでの時間・コスト負荷を避けるため |
 | 長尺コンテンツでのパフォーマンス目標 | コンテンツ長に応じて調整(短尺は1分以内、長尺は進捗表示で体感速度担保) | 長さに関係なく一律1分以内 | 1時間相当は30〜35チャンクにのぼり、一律1分以内は非現実的なため |
+| Ollama/ElevenLabs関連の環境変数 | `.env.example`・実装から削除する | 「棚上げ」として残す | 使われない設定が残ると`.env.example`が実態と乖離する(`ANTHROPIC_API_KEY`に誤った「legacy」コメントが残っていたのと同じ問題の再発を防ぐ)。ただしローカルLLMというアイデア自体は将来の検討事項として本PRDに記録を残す(上記「将来の検討事項」参照) |
 
 ---
 
