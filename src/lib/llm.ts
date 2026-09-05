@@ -1,16 +1,40 @@
 import Anthropic from "@anthropic-ai/sdk";
 
-const client = new Anthropic({
+const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
+
+const CLAUDE_MODEL = process.env.ANTHROPIC_MODEL ?? "claude-haiku-4-5-20251001";
 
 interface SentencePair {
   original: string;
   translation: string;
 }
 
+const translateTool: Anthropic.Tool = {
+  name: "record_translations",
+  description: "Record extracted unique English sentences with their Japanese translations",
+  input_schema: {
+    type: "object",
+    properties: {
+      sentences: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            original: { type: "string" },
+            translation: { type: "string" },
+          },
+          required: ["original", "translation"],
+        },
+      },
+    },
+    required: ["sentences"],
+  },
+};
+
 // Clean up raw text: decode HTML entities, remove timestamps, deduplicate
-function cleanText(text: string): string {
+export function cleanText(text: string): string {
   return text
     // Decode HTML entities
     .replace(/&#39;/g, "'")
@@ -28,7 +52,7 @@ function cleanText(text: string): string {
 }
 
 // Split text into chunks of roughly maxChars, breaking at sentence-like boundaries
-function splitIntoChunks(text: string, maxChars = 1500): string[] {
+export function splitIntoChunks(text: string, maxChars = 1500): string[] {
   // Split on sentence-ending punctuation or newlines
   const parts = text.split(/(?<=[.!?])\s+/);
   const chunks: string[] = [];
@@ -47,22 +71,21 @@ function splitIntoChunks(text: string, maxChars = 1500): string[] {
   return chunks;
 }
 
-async function processChunk(chunk: string): Promise<SentencePair[]> {
-  const message = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
+export async function processChunk(chunk: string): Promise<SentencePair[]> {
+  const response = await anthropic.messages.create({
+    model: CLAUDE_MODEL,
     max_tokens: 8192,
+    tools: [translateTool],
+    tool_choice: { type: "tool", name: "record_translations" },
     messages: [
       {
         role: "user",
-        content: `You are given English text extracted from a document. Your task:
+        content: `You are given English text. Extract unique English sentences and translate each to Japanese.
 
-1. Extract unique English sentences or phrases (remove duplicates — the same phrase repeated multiple times should appear only once)
-2. Ignore non-English text, timestamps, metadata, headers, or URLs
-3. Translate each unique sentence/phrase into natural Japanese
-
-Return ONLY a valid JSON array with no additional text or markdown. Each element should have "original" (English) and "translation" (Japanese).
-
-Example: [{"original": "How are you?", "translation": "お元気ですか？"}]
+Rules:
+- Remove duplicate phrases
+- Skip timestamps, URLs, metadata
+- Natural Japanese translations
 
 Text:
 ${chunk}`,
@@ -70,29 +93,18 @@ ${chunk}`,
     ],
   });
 
-  const content = message.content[0];
-  if (content.type !== "text") {
-    throw new Error("Unexpected response type from Claude");
+  const toolUseBlock = response.content.find(
+    (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
+  );
+  if (!toolUseBlock) {
+    throw new Error("No tool_use block in Claude response");
   }
 
-  let jsonStr = content.text.trim();
-
-  // Remove markdown code block wrapper if present
-  const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (jsonMatch) {
-    jsonStr = jsonMatch[1].trim();
+  const parsed = toolUseBlock.input as { sentences: SentencePair[] };
+  if (!Array.isArray(parsed.sentences)) {
+    throw new Error("Unexpected JSON structure from Claude");
   }
-
-  // If response was truncated, try to fix by closing the JSON array
-  if (message.stop_reason === "max_tokens") {
-    // Find last complete object (ending with })
-    const lastCloseBrace = jsonStr.lastIndexOf("}");
-    if (lastCloseBrace !== -1) {
-      jsonStr = jsonStr.substring(0, lastCloseBrace + 1) + "]";
-    }
-  }
-
-  return JSON.parse(jsonStr) as SentencePair[];
+  return parsed.sentences;
 }
 
 export async function splitAndTranslate(text: string): Promise<SentencePair[]> {
