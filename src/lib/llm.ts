@@ -11,6 +11,8 @@ interface SentencePair {
   translation: string;
 }
 
+// Tool Use, not the newer Structured Outputs API, because Structured Outputs
+// currently only supports Sonnet 4.5/Opus 4.1, not CLAUDE_MODEL's Haiku 4.5.
 const translateTool: Anthropic.Tool = {
   name: "record_translations",
   description: "Record extracted unique English sentences with their Japanese translations",
