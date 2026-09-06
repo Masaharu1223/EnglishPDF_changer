@@ -124,8 +124,8 @@ PDF/テキストをアップロード(または文字起こしテキストを貼
 
 | # | Phase | Description | Status | Parallel | Depends | PRP Plan |
 |---|-------|-------------|--------|----------|---------|----------|
-| 1 | LLM層のClaude API化 | `src/lib/llm.ts`のOllama呼び出しをClaude API呼び出しに置換 | in-progress | with 2 | - | `.claude/PRPs/plans/llm-claude-api-migration.plan.md` |
-| 2 | TTS層のOpenAI API化 | `src/lib/elevenlabs.ts`相当をOpenAI TTS API呼び出しに置換 | pending | with 1 | - | - |
+| 1 | LLM層のClaude API化 | `src/lib/llm.ts`のOllama呼び出しをClaude API呼び出しに置換 | complete | with 2 | - | `.claude/PRPs/plans/llm-claude-api-migration.plan.md` |
+| 2 | TTS層のOpenAI API化 | `src/lib/elevenlabs.ts`相当をOpenAI TTS API呼び出しに置換 | in-progress | with 1 | - | `.claude/PRPs/plans/tts-openai-migration.plan.md` |
 | 3 | 長尺コンテンツ対応の検証・チューニング | 1時間相当(約4.5〜5万文字)のテキストでE2Eテストし、必要なら並列化を実装 | pending | - | 1 | - |
 | 4 | 環境変数・ドキュメント整理 | `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`の設定整理、`OLLAMA_*`/`ELEVENLABS_*`の削除、README更新、Issue #2クローズ | pending | - | 1, 2, 3 | - |
 
