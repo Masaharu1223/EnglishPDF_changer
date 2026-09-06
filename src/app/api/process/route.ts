@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { splitAndTranslate } from "@/lib/claude";
+import { splitAndTranslate } from "@/lib/llm";
 
 export async function POST(request: NextRequest) {
   try {
