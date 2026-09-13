@@ -14,12 +14,81 @@ export default function Home() {
   const [inputMode, setInputMode] = useState<InputMode>("file");
   const [textInput, setTextInput] = useState("");
 
+  const isBusy = state.status === "extracting" || state.status === "processing";
+
+  // Shared by file upload and text paste: both end up with a plain string
+  // of English text, split it into chunks and translate them one at a
+  // time so the sentence list and progress counter update as each result
+  // arrives, instead of waiting for the entire document to finish
+  // (see issue #10).
+  const processText = async (text: string) => {
+    setSentences([]);
+    setState({ status: "processing", progress: "Splitting text into chunks..." });
+
+    const splitRes = await fetch("/api/process", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "split", text }),
+    });
+    if (!splitRes.ok) {
+      const err = await splitRes.json();
+      throw new Error(err.error || "Failed to split text");
+    }
+    const { chunks } = (await splitRes.json()) as { chunks: string[] };
+
+    // Translate chunks sequentially. Deliberately not parallel - running
+    // multiple chunks concurrently is a separate future improvement (see
+    // api-pivot-long-form.prd.md Phase 3) and out of scope here.
+    let nextSentenceIndex = 0;
+    for (let i = 0; i < chunks.length; i++) {
+      setState({
+        status: "processing",
+        progress: `Translating... (${i}/${chunks.length} chunks)`,
+        completedChunks: i,
+        totalChunks: chunks.length,
+      });
+
+      try {
+        const translateRes = await fetch("/api/process", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "translate", chunk: chunks[i] }),
+        });
+        if (!translateRes.ok) {
+          const err = await translateRes.json();
+          throw new Error(err.error || "Failed to translate chunk");
+        }
+        const { sentences: chunkSentences } = (await translateRes.json()) as {
+          sentences: { original: string; translation: string }[];
+        };
+
+        const newSentences = chunkSentences.map((s) => ({
+          id: `sentence-${nextSentenceIndex++}`,
+          original: s.original,
+          translation: s.translation,
+        }));
+        setSentences((prev) => [...prev, ...newSentences]);
+      } catch (chunkError) {
+        // Skip the failed chunk but keep going, matching the retry-free
+        // "log and continue" pattern already used in splitAndTranslate
+        // for the legacy bulk path.
+        console.error(`Chunk ${i + 1}/${chunks.length} failed, skipping:`, chunkError);
+      }
+    }
+
+    setState({
+      status: "done",
+      completedChunks: chunks.length,
+      totalChunks: chunks.length,
+    });
+  };
+
   const handleFileSelected = async (file: File) => {
     setSentences([]);
     setState({ status: "extracting", progress: "Extracting text from file..." });
 
     try {
-      // Step 1: Extract text
+      // Step 1: Extract text from the uploaded file
       const arrayBuffer = await file.arrayBuffer();
       const base64 = btoa(
         new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), "")
@@ -35,68 +104,7 @@ export default function Home() {
       }
       const { text } = await extractRes.json();
 
-      // Step 2: Ask the server to split the text into chunks. Chunks are
-      // then translated one at a time below so the sentence list and
-      // progress counter update as each result arrives, instead of
-      // waiting for the entire document to finish (see issue #10).
-      setState({ status: "processing", progress: "Splitting text into chunks..." });
-      const splitRes = await fetch("/api/process", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "split", text }),
-      });
-      if (!splitRes.ok) {
-        const err = await splitRes.json();
-        throw new Error(err.error || "Failed to split text");
-      }
-      const { chunks } = (await splitRes.json()) as { chunks: string[] };
-
-      // Step 3: Translate chunks sequentially. Deliberately not parallel -
-      // running multiple chunks concurrently is a separate future
-      // improvement (see api-pivot-long-form.prd.md Phase 3) and out of
-      // scope here.
-      let nextSentenceIndex = 0;
-      for (let i = 0; i < chunks.length; i++) {
-        setState({
-          status: "processing",
-          progress: `Translating... (${i}/${chunks.length} chunks)`,
-          completedChunks: i,
-          totalChunks: chunks.length,
-        });
-
-        try {
-          const translateRes = await fetch("/api/process", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "translate", chunk: chunks[i] }),
-          });
-          if (!translateRes.ok) {
-            const err = await translateRes.json();
-            throw new Error(err.error || "Failed to translate chunk");
-          }
-          const { sentences: chunkSentences } = (await translateRes.json()) as {
-            sentences: { original: string; translation: string }[];
-          };
-
-          const newSentences = chunkSentences.map((s) => ({
-            id: `sentence-${nextSentenceIndex++}`,
-            original: s.original,
-            translation: s.translation,
-          }));
-          setSentences((prev) => [...prev, ...newSentences]);
-        } catch (chunkError) {
-          // Skip the failed chunk but keep going, matching the retry-free
-          // "log and continue" pattern already used in splitAndTranslate
-          // for the legacy bulk path.
-          console.error(`Chunk ${i + 1}/${chunks.length} failed, skipping:`, chunkError);
-        }
-      }
-
-      setState({
-        status: "done",
-        completedChunks: chunks.length,
-        totalChunks: chunks.length,
-      });
+      await processText(text);
     } catch (error) {
       setState({
         status: "error",
@@ -109,23 +117,9 @@ export default function Home() {
     const trimmed = textInput.trim();
     if (!trimmed) return;
 
-    setSentences([]);
-    setState({ status: "processing", progress: "Splitting sentences and translating..." });
-
     try {
-      const processRes = await fetch("/api/process", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: trimmed }),
-      });
-      if (!processRes.ok) {
-        const err = await processRes.json();
-        throw new Error(err.error || "Failed to process text");
-      }
-      const { sentences: result } = await processRes.json();
-
-      setSentences(result);
-      setState({ status: "done" });
+      // ファイルではないので /api/extract は経由せず、貼り付けたテキストをそのまま渡す
+      await processText(trimmed);
     } catch (error) {
       setState({
         status: "error",
@@ -160,40 +154,37 @@ export default function Home() {
             <button
               type="button"
               onClick={() => setInputMode("file")}
-              disabled={state.status === "extracting" || state.status === "processing"}
+              disabled={isBusy}
               className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
                 inputMode === "file"
                   ? "bg-blue-500 text-white"
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              } ${state.status === "extracting" || state.status === "processing" ? "opacity-50 cursor-not-allowed" : ""}`}
+              } ${isBusy ? "opacity-50 cursor-not-allowed" : ""}`}
             >
               ファイルをアップロード
             </button>
             <button
               type="button"
               onClick={() => setInputMode("text")}
-              disabled={state.status === "extracting" || state.status === "processing"}
+              disabled={isBusy}
               className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
                 inputMode === "text"
                   ? "bg-blue-500 text-white"
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              } ${state.status === "extracting" || state.status === "processing" ? "opacity-50 cursor-not-allowed" : ""}`}
+              } ${isBusy ? "opacity-50 cursor-not-allowed" : ""}`}
             >
               テキストを貼り付け
             </button>
           </div>
 
           {inputMode === "file" ? (
-            <FileUploader
-              onFileSelected={handleFileSelected}
-              disabled={state.status === "extracting" || state.status === "processing"}
-            />
+            <FileUploader onFileSelected={handleFileSelected} disabled={isBusy} />
           ) : (
             <div className="space-y-3">
               <textarea
                 value={textInput}
                 onChange={(e) => setTextInput(e.target.value)}
-                disabled={state.status === "extracting" || state.status === "processing"}
+                disabled={isBusy}
                 placeholder="英文をここに貼り付けてください(YouTubeの文字起こしなど、長文もそのまま貼り付け可能です)"
                 rows={10}
                 className="w-full rounded-xl border-2 border-gray-300 p-4 text-sm text-gray-800 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
@@ -201,7 +192,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={handleTextSubmit}
-                disabled={state.status === "extracting" || state.status === "processing" || !textInput.trim()}
+                disabled={isBusy || !textInput.trim()}
                 className="w-full rounded-xl bg-blue-500 text-white font-medium py-3 transition-colors hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-500"
               >
                 このテキストを処理する
@@ -210,7 +201,7 @@ export default function Home() {
           )}
         </div>
 
-        {(state.status === "extracting" || state.status === "processing") && (
+        {isBusy && (
           <div className="text-center py-8">
             <svg className="animate-spin h-8 w-8 mx-auto text-blue-500 mb-3" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
