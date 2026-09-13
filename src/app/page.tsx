@@ -6,9 +6,13 @@ import SentenceList from "@/components/SentenceList";
 import RotatingText from "@/components/RotatingText";
 import type { Sentence, ProcessingState } from "@/types";
 
+type InputMode = "file" | "text";
+
 export default function Home() {
   const [sentences, setSentences] = useState<Sentence[]>([]);
   const [state, setState] = useState<ProcessingState>({ status: "idle" });
+  const [inputMode, setInputMode] = useState<InputMode>("file");
+  const [textInput, setTextInput] = useState("");
 
   const handleFileSelected = async (file: File) => {
     setSentences([]);
@@ -101,6 +105,35 @@ export default function Home() {
     }
   };
 
+  const handleTextSubmit = async () => {
+    const trimmed = textInput.trim();
+    if (!trimmed) return;
+
+    setSentences([]);
+    setState({ status: "processing", progress: "Splitting sentences and translating..." });
+
+    try {
+      const processRes = await fetch("/api/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: trimmed }),
+      });
+      if (!processRes.ok) {
+        const err = await processRes.json();
+        throw new Error(err.error || "Failed to process text");
+      }
+      const { sentences: result } = await processRes.json();
+
+      setSentences(result);
+      setState({ status: "done" });
+    } catch (error) {
+      setState({
+        status: "error",
+        error: error instanceof Error ? error.message : "An unexpected error occurred",
+      });
+    }
+  };
+
   return (
     <main className="min-h-screen py-12 px-4">
       <div className="max-w-3xl mx-auto space-y-8">
@@ -114,18 +147,68 @@ export default function Home() {
           <p className="text-gray-500 mt-2">
             <RotatingText
               texts={[
-                "Upload a PDF or TXT file to extract English sentences with Japanese translations and audio",
-                "好きなPDFまたはTXTファイルをアップロード。英文の抽出・日本語翻訳・音声再生ができます",
+                "Upload a PDF/TXT file or paste text to extract English sentences with Japanese translations and audio",
+                "PDF/TXTファイルのアップロード、またはテキストの貼り付けから、英文の抽出・日本語翻訳・音声再生ができます",
               ]}
               interval={3000}
             />
           </p>
         </div>
 
-        <FileUploader
-          onFileSelected={handleFileSelected}
-          disabled={state.status === "extracting" || state.status === "processing"}
-        />
+        <div>
+          <div className="flex justify-center gap-2 mb-4">
+            <button
+              type="button"
+              onClick={() => setInputMode("file")}
+              disabled={state.status === "extracting" || state.status === "processing"}
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                inputMode === "file"
+                  ? "bg-blue-500 text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              } ${state.status === "extracting" || state.status === "processing" ? "opacity-50 cursor-not-allowed" : ""}`}
+            >
+              ファイルをアップロード
+            </button>
+            <button
+              type="button"
+              onClick={() => setInputMode("text")}
+              disabled={state.status === "extracting" || state.status === "processing"}
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                inputMode === "text"
+                  ? "bg-blue-500 text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              } ${state.status === "extracting" || state.status === "processing" ? "opacity-50 cursor-not-allowed" : ""}`}
+            >
+              テキストを貼り付け
+            </button>
+          </div>
+
+          {inputMode === "file" ? (
+            <FileUploader
+              onFileSelected={handleFileSelected}
+              disabled={state.status === "extracting" || state.status === "processing"}
+            />
+          ) : (
+            <div className="space-y-3">
+              <textarea
+                value={textInput}
+                onChange={(e) => setTextInput(e.target.value)}
+                disabled={state.status === "extracting" || state.status === "processing"}
+                placeholder="英文をここに貼り付けてください(YouTubeの文字起こしなど、長文もそのまま貼り付け可能です)"
+                rows={10}
+                className="w-full rounded-xl border-2 border-gray-300 p-4 text-sm text-gray-800 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+              <button
+                type="button"
+                onClick={handleTextSubmit}
+                disabled={state.status === "extracting" || state.status === "processing" || !textInput.trim()}
+                className="w-full rounded-xl bg-blue-500 text-white font-medium py-3 transition-colors hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-500"
+              >
+                このテキストを処理する
+              </button>
+            </div>
+          )}
+        </div>
 
         {(state.status === "extracting" || state.status === "processing") && (
           <div className="text-center py-8">
