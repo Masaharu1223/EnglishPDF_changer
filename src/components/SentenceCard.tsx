@@ -58,7 +58,11 @@ export default function SentenceCard({ sentence, index }: SentenceCardProps) {
           {index + 1}
         </span>
         <div className="flex-1 min-w-0">
-          <p className="text-gray-900 font-medium leading-relaxed">{sentence.original}</p>
+          <p className="text-gray-900 font-medium leading-relaxed">
+            {sentence.original.split(/(\s+)/).map((token, i) =>
+              /\S/.test(token) ? <span key={i}>{token}</span> : token
+            )}
+          </p>
           <p className="text-gray-500 mt-2 text-sm leading-relaxed">{sentence.translation}</p>
         </div>
         <button
