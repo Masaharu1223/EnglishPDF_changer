@@ -3,16 +3,19 @@
 import { useState } from "react";
 import FileUploader from "@/components/FileUploader";
 import SentenceList from "@/components/SentenceList";
+import ShadowingSheet from "@/components/ShadowingSheet";
 import RotatingText from "@/components/RotatingText";
 import type { Sentence, ProcessingState } from "@/types";
 
 type InputMode = "file" | "text";
+type ResultView = "cards" | "shadowing";
 
 export default function Home() {
   const [sentences, setSentences] = useState<Sentence[]>([]);
   const [state, setState] = useState<ProcessingState>({ status: "idle" });
   const [inputMode, setInputMode] = useState<InputMode>("file");
   const [textInput, setTextInput] = useState("");
+  const [resultView, setResultView] = useState<ResultView>("cards");
 
   const isBusy = state.status === "extracting" || state.status === "processing";
 
@@ -217,7 +220,38 @@ export default function Home() {
           </div>
         )}
 
-        <SentenceList sentences={sentences} />
+        {sentences.length > 0 && (
+          <div className="flex justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => setResultView("cards")}
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                resultView === "cards"
+                  ? "bg-blue-500 text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              カード一覧
+            </button>
+            <button
+              type="button"
+              onClick={() => setResultView("shadowing")}
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                resultView === "shadowing"
+                  ? "bg-blue-500 text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              シャドーイング用テキスト
+            </button>
+          </div>
+        )}
+
+        {resultView === "cards" ? (
+          <SentenceList sentences={sentences} />
+        ) : (
+          <ShadowingSheet sentences={sentences} />
+        )}
       </div>
     </main>
   );
