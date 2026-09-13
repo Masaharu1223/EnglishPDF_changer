@@ -31,21 +31,68 @@ export default function Home() {
       }
       const { text } = await extractRes.json();
 
-      // Step 2: Split & translate with Claude
-      setState({ status: "processing", progress: "Splitting sentences and translating..." });
-      const processRes = await fetch("/api/process", {
+      // Step 2: Ask the server to split the text into chunks. Chunks are
+      // then translated one at a time below so the sentence list and
+      // progress counter update as each result arrives, instead of
+      // waiting for the entire document to finish (see issue #10).
+      setState({ status: "processing", progress: "Splitting text into chunks..." });
+      const splitRes = await fetch("/api/process", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ action: "split", text }),
       });
-      if (!processRes.ok) {
-        const err = await processRes.json();
-        throw new Error(err.error || "Failed to process text");
+      if (!splitRes.ok) {
+        const err = await splitRes.json();
+        throw new Error(err.error || "Failed to split text");
       }
-      const { sentences: result } = await processRes.json();
+      const { chunks } = (await splitRes.json()) as { chunks: string[] };
 
-      setSentences(result);
-      setState({ status: "done" });
+      // Step 3: Translate chunks sequentially. Deliberately not parallel -
+      // running multiple chunks concurrently is a separate future
+      // improvement (see api-pivot-long-form.prd.md Phase 3) and out of
+      // scope here.
+      let nextSentenceIndex = 0;
+      for (let i = 0; i < chunks.length; i++) {
+        setState({
+          status: "processing",
+          progress: `Translating... (${i}/${chunks.length} chunks)`,
+          completedChunks: i,
+          totalChunks: chunks.length,
+        });
+
+        try {
+          const translateRes = await fetch("/api/process", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "translate", chunk: chunks[i] }),
+          });
+          if (!translateRes.ok) {
+            const err = await translateRes.json();
+            throw new Error(err.error || "Failed to translate chunk");
+          }
+          const { sentences: chunkSentences } = (await translateRes.json()) as {
+            sentences: { original: string; translation: string }[];
+          };
+
+          const newSentences = chunkSentences.map((s) => ({
+            id: `sentence-${nextSentenceIndex++}`,
+            original: s.original,
+            translation: s.translation,
+          }));
+          setSentences((prev) => [...prev, ...newSentences]);
+        } catch (chunkError) {
+          // Skip the failed chunk but keep going, matching the retry-free
+          // "log and continue" pattern already used in splitAndTranslate
+          // for the legacy bulk path.
+          console.error(`Chunk ${i + 1}/${chunks.length} failed, skipping:`, chunkError);
+        }
+      }
+
+      setState({
+        status: "done",
+        completedChunks: chunks.length,
+        totalChunks: chunks.length,
+      });
     } catch (error) {
       setState({
         status: "error",
