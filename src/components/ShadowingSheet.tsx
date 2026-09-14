@@ -2,7 +2,6 @@
 
 import type { Sentence } from "@/types";
 import { buildShadowingLines } from "@/lib/shadowing-sheet";
-import CopyButton from "./CopyButton";
 
 interface ShadowingSheetProps {
   sentences: Sentence[];
@@ -18,9 +17,6 @@ export default function ShadowingSheet({ sentences }: ShadowingSheetProps) {
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-      <div className="flex justify-end mb-3">
-        <CopyButton text={lines.join("\n\n")} label="すべてコピー" />
-      </div>
       <div className="space-y-3">
         {lines.map((line, i) => (
           <p key={i} className="text-gray-900 leading-relaxed">
