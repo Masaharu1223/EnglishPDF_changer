@@ -46,7 +46,7 @@ export default function Home() {
     for (let i = 0; i < chunks.length; i++) {
       setState({
         status: "processing",
-        progress: `Translating... (${i}/${chunks.length} chunks)`,
+        progress: `Translating... ${Math.round((i / chunks.length) * 100)}% (${i}/${chunks.length} chunks)`,
         completedChunks: i,
         totalChunks: chunks.length,
       });
