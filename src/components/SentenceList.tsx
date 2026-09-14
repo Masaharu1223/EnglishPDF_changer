@@ -2,6 +2,7 @@
 
 import type { Sentence } from "@/types";
 import SentenceCard from "./SentenceCard";
+import CopyButton from "./CopyButton";
 
 interface SentenceListProps {
   sentences: Sentence[];
@@ -10,11 +11,18 @@ interface SentenceListProps {
 export default function SentenceList({ sentences }: SentenceListProps) {
   if (sentences.length === 0) return null;
 
+  const allText = sentences
+    .map((sentence) => `${sentence.original}\n${sentence.translation}`)
+    .join("\n\n");
+
   return (
     <div className="space-y-3">
-      <h2 className="text-lg font-semibold text-gray-800">
-        Extracted Sentences ({sentences.length})
-      </h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-gray-800">
+          Extracted Sentences ({sentences.length})
+        </h2>
+        <CopyButton text={allText} label="すべてコピー" />
+      </div>
       {sentences.map((sentence, i) => (
         <SentenceCard key={sentence.id} sentence={sentence} index={i} />
       ))}
