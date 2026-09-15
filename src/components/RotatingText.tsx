@@ -26,9 +26,17 @@ export default function RotatingText({ texts, interval = 3000, className = "" }:
 
   return (
     <span className={`rotating-text-wrapper ${className}`}>
-      <span className={`rotating-text ${isFlipping ? "rotating-out" : "rotating-in"}`}>
-        {texts[index]}
-      </span>
+      {texts.map((text, i) => (
+        <span
+          key={i}
+          aria-hidden={i !== index}
+          className={`rotating-text ${
+            i !== index ? "rotating-hidden" : isFlipping ? "rotating-out" : "rotating-in"
+          }`}
+        >
+          {text}
+        </span>
+      ))}
     </span>
   );
 }
