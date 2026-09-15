@@ -7,12 +7,13 @@ body {
 }
 
 .rotating-text-wrapper {
-  display: inline-block;
+  display: inline-grid;
   perspective: 600px;
 }
 
 .rotating-text {
   display: inline-block;
+  grid-area: 1 / 1;
   transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
   transform-origin: center center;
 }
@@ -25,4 +26,8 @@ body {
 .rotating-text.rotating-in {
   transform: rotateX(0deg);
   opacity: 1;
+}
+
+.rotating-text.rotating-hidden {
+  opacity: 0;
 }
