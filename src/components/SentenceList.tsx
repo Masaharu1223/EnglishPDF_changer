@@ -1,8 +1,10 @@
 "use client";
 
+import { useRef } from "react";
 import type { Sentence } from "@/types";
 import SentenceCard from "./SentenceCard";
 import CopyButton from "./CopyButton";
+import DownloadPdfButton from "./DownloadPdfButton";
 import { buildTocGroups } from "@/lib/sentence-toc";
 
 interface SentenceListProps {
@@ -14,6 +16,8 @@ function scrollToSentence(start: number) {
 }
 
 export default function SentenceList({ sentences }: SentenceListProps) {
+  const contentRef = useRef<HTMLDivElement>(null);
+
   if (sentences.length === 0) return null;
 
   const allText = sentences
@@ -27,7 +31,14 @@ export default function SentenceList({ sentences }: SentenceListProps) {
         <h2 className="text-lg font-semibold text-gray-800">
           Extracted Sentences ({sentences.length})
         </h2>
-        <CopyButton text={allText} label="全文をコピー" />
+        <div className="flex gap-2">
+          <DownloadPdfButton
+            targetRef={contentRef}
+            fileName="extracted-sentences.pdf"
+            label="PDFをダウンロード"
+          />
+          <CopyButton text={allText} label="全文をコピー" />
+        </div>
       </div>
       {tocGroups.length > 0 && (
         <div className="flex flex-wrap gap-2">
@@ -43,9 +54,11 @@ export default function SentenceList({ sentences }: SentenceListProps) {
           ))}
         </div>
       )}
-      {sentences.map((sentence, i) => (
-        <SentenceCard key={sentence.id} sentence={sentence} index={i} />
-      ))}
+      <div ref={contentRef} className="space-y-3">
+        {sentences.map((sentence, i) => (
+          <SentenceCard key={sentence.id} sentence={sentence} index={i} />
+        ))}
+      </div>
     </div>
   );
 }
