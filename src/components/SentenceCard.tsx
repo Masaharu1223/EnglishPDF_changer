@@ -72,7 +72,7 @@ export default function SentenceCard({ sentence, index }: SentenceCardProps) {
   };
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">
+    <div id={`sentence-${index + 1}`} className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">
       <div className="flex items-start gap-4">
         <span className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-semibold">
           {index + 1}
