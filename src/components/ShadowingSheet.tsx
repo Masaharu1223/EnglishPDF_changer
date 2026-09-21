@@ -5,6 +5,7 @@ import type { Sentence } from "@/types";
 import { buildShadowingLines } from "@/lib/shadowing-sheet";
 import CopyButton from "./CopyButton";
 import DownloadPdfButton from "./DownloadPdfButton";
+import ClickableEnglishText from "./ClickableEnglishText";
 
 interface ShadowingSheetProps {
   sentences: Sentence[];
@@ -33,7 +34,7 @@ export default function ShadowingSheet({ sentences }: ShadowingSheetProps) {
       <div ref={contentRef} className="space-y-3">
         {lines.map((line, i) => (
           <p key={i} className="text-gray-900 leading-relaxed">
-            {line}
+            <ClickableEnglishText text={line} />
           </p>
         ))}
       </div>
