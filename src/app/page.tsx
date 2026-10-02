@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import FileUploader from "@/components/FileUploader";
 import SentenceList from "@/components/SentenceList";
 import ShadowingSheet from "@/components/ShadowingSheet";
@@ -10,12 +10,55 @@ import type { Sentence, ProcessingState } from "@/types";
 type InputMode = "file" | "text";
 type ResultView = "cards" | "shadowing";
 
+const SENTENCES_STORAGE_KEY = "pdfex:sentences";
+
 export default function Home() {
   const [sentences, setSentences] = useState<Sentence[]>([]);
   const [state, setState] = useState<ProcessingState>({ status: "idle" });
   const [inputMode, setInputMode] = useState<InputMode>("file");
   const [textInput, setTextInput] = useState("");
   const [resultView, setResultView] = useState<ResultView>("cards");
+
+  // Restore results persisted before the last reload. Runs once after
+  // mount (not during the initial useState) so the first client render
+  // still matches the server-rendered empty state - no hydration mismatch.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(SENTENCES_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Partial<{
+        version: number;
+        sentences: Sentence[];
+        resultView: ResultView;
+      }>;
+      if (parsed.version === 1 && Array.isArray(parsed.sentences)) {
+        setSentences(parsed.sentences);
+        if (parsed.resultView === "cards" || parsed.resultView === "shadowing") {
+          setResultView(parsed.resultView);
+        }
+      }
+    } catch {
+      // Corrupt JSON or storage unavailable (Safari private mode, quota,
+      // disabled storage) - just start fresh, same as a first-time visit.
+    }
+  }, []);
+
+  // Keep persisted results in sync. setSentences([]) at the start of a new
+  // run is just another state change, so it clears the old entry too.
+  useEffect(() => {
+    try {
+      if (sentences.length === 0) {
+        sessionStorage.removeItem(SENTENCES_STORAGE_KEY);
+      } else {
+        sessionStorage.setItem(
+          SENTENCES_STORAGE_KEY,
+          JSON.stringify({ version: 1, sentences, resultView })
+        );
+      }
+    } catch {
+      // Best-effort persistence only; ignore quota/private-mode errors.
+    }
+  }, [sentences, resultView]);
 
   const isBusy = state.status === "extracting" || state.status === "processing";
 
