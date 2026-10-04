@@ -5,19 +5,24 @@ import FileUploader from "@/components/FileUploader";
 import SentenceList from "@/components/SentenceList";
 import ShadowingSheet from "@/components/ShadowingSheet";
 import RotatingText from "@/components/RotatingText";
+import { useSession } from "@/lib/auth-client";
 import type { Sentence, ProcessingState } from "@/types";
 
 type InputMode = "file" | "text";
 type ResultView = "cards" | "shadowing";
+type SourceType = "pdf" | "txt" | "paste";
+type SaveState = "idle" | "saving" | "saved" | "error";
 
 const SENTENCES_STORAGE_KEY = "pdfex:sentences";
 
 export default function Home() {
+  const { data: session } = useSession();
   const [sentences, setSentences] = useState<Sentence[]>([]);
   const [state, setState] = useState<ProcessingState>({ status: "idle" });
   const [inputMode, setInputMode] = useState<InputMode>("file");
   const [textInput, setTextInput] = useState("");
   const [resultView, setResultView] = useState<ResultView>("cards");
+  const [saveState, setSaveState] = useState<SaveState>("idle");
 
   // Restore results persisted before the last reload. Runs once after
   // mount (not during the initial useState) so the first client render
@@ -67,8 +72,12 @@ export default function Home() {
   // time so the sentence list and progress counter update as each result
   // arrives, instead of waiting for the entire document to finish
   // (see issue #10).
-  const processText = async (text: string) => {
+  const processText = async (
+    text: string,
+    meta: { title: string; sourceType: SourceType }
+  ) => {
     setSentences([]);
+    setSaveState("idle");
     setState({ status: "processing", progress: "Splitting text into chunks..." });
 
     const splitRes = await fetch("/api/process", {
@@ -81,6 +90,12 @@ export default function Home() {
       throw new Error(err.error || "Failed to split text");
     }
     const { chunks } = (await splitRes.json()) as { chunks: string[] };
+
+    // setSentences(prev => ...) only updates state, it doesn't let us read
+    // the final list synchronously once the loop ends (stale closure) - so
+    // collect the same items into a plain array in parallel for the save
+    // call below.
+    const collected: Sentence[] = [];
 
     // Translate chunks sequentially. Deliberately not parallel - running
     // multiple chunks concurrently is a separate future improvement (see
@@ -113,6 +128,7 @@ export default function Home() {
           original: s.original,
           translation: s.translation,
         }));
+        collected.push(...newSentences);
         setSentences((prev) => [...prev, ...newSentences]);
       } catch (chunkError) {
         // Skip the failed chunk but keep going, matching the retry-free
@@ -127,6 +143,33 @@ export default function Home() {
       completedChunks: chunks.length,
       totalChunks: chunks.length,
     });
+
+    // Auto-save to history when logged in. Best-effort: a failed save
+    // never turns into a translation error, since the user's results are
+    // already shown either way.
+    if (session?.user && collected.length > 0) {
+      setSaveState("saving");
+      try {
+        const saveRes = await fetch("/api/documents", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: meta.title,
+            sourceType: meta.sourceType,
+            rawText: text,
+            sentences: collected.map((s, index) => ({
+              position: index,
+              original: s.original,
+              translation: s.translation,
+            })),
+          }),
+        });
+        setSaveState(saveRes.ok ? "saved" : "error");
+      } catch (saveError) {
+        console.error("Failed to save document:", saveError);
+        setSaveState("error");
+      }
+    }
   };
 
   const handleFileSelected = async (file: File) => {
@@ -150,7 +193,10 @@ export default function Home() {
       }
       const { text } = await extractRes.json();
 
-      await processText(text);
+      await processText(text, {
+        title: file.name,
+        sourceType: file.name.toLowerCase().endsWith(".pdf") ? "pdf" : "txt",
+      });
     } catch (error) {
       setState({
         status: "error",
@@ -165,7 +211,10 @@ export default function Home() {
 
     try {
       // ファイルではないので /api/extract は経由せず、貼り付けたテキストをそのまま渡す
-      await processText(trimmed);
+      await processText(trimmed, {
+        title: trimmed.slice(0, 40),
+        sourceType: "paste",
+      });
     } catch (error) {
       setState({
         status: "error",
@@ -261,6 +310,20 @@ export default function Home() {
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
             {state.error}
           </div>
+        )}
+
+        {state.status === "done" && sentences.length > 0 && (
+          <p className="text-center text-sm text-gray-400">
+            {!session?.user
+              ? "ログインすると処理結果が履歴として保存されます"
+              : saveState === "saving"
+                ? "保存中..."
+                : saveState === "saved"
+                  ? "履歴に保存しました"
+                  : saveState === "error"
+                    ? "履歴への保存に失敗しました(結果はこのまま表示されています)"
+                    : null}
+          </p>
         )}
 
         {sentences.length > 0 && (
