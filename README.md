@@ -4,16 +4,17 @@
 ![React](https://img.shields.io/badge/-ReactJs-61DAFB?logo=react&logoColor=white&style=for-the-badge)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/tailwindcss-%2338B2AC.svg?style=for-the-badge&logo=tailwind-css&logoColor=white)
-![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)
-![Ollama](https://img.shields.io/badge/Ollama-000000?style=for-the-badge&logo=ollama&logoColor=white)
-![NextAuth.js](https://img.shields.io/badge/NextAuth.js-7C3AED?style=for-the-badge)
+![Claude](https://img.shields.io/badge/Claude%20API-D97757?style=for-the-badge&logo=anthropic&logoColor=white)
+![Neon](https://img.shields.io/badge/Neon-00E599?style=for-the-badge&logo=postgresql&logoColor=white)
+![Better Auth](https://img.shields.io/badge/Better%20Auth-000000?style=for-the-badge)
 ![ElevenLabs](https://img.shields.io/badge/ElevenLabs-000000?style=for-the-badge)
+![Vercel](https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white)
 
 ## プロジェクト概要
 
-PDF / テキストファイルから英文を抽出し、日本語に翻訳して学習カード化する Next.js アプリ。翻訳は外部 API を使わずローカルで動く **Ollama** が処理するため、翻訳自体には API キー不要・従量課金なしで動作する。
+PDF / テキストファイルから英文を抽出し、日本語訳付きの学習カード・シャドーイング用テキストにする Next.js アプリ。翻訳は Claude API、音声読み上げは ElevenLabs が担う。
 
-Google / LINE ログイン、抽出履歴の保存（Supabase）、無料・有料ティア別の音声読み上げ（無料: ブラウザの Web Speech API / 有料: ElevenLabs）を備える。
+Google ログインすると、処理結果(抽出した文とその翻訳)が Neon(Postgres)に自動保存される。未ログインでも抽出・翻訳・音声再生自体はそのまま利用できる。
 
 ## 使用技術一覧
 
@@ -21,11 +22,13 @@ Google / LINE ログイン、抽出履歴の保存（Supabase）、無料・有�
 |---|---|
 | フレームワーク | Next.js 14 (App Router), React 18, TypeScript |
 | スタイリング | Tailwind CSS |
-| 翻訳 LLM | Ollama（OpenAI 互換 API 経由、`openai` SDK を利用） |
-| 認証 | NextAuth.js v5（Google OAuth / LINE Login） |
-| DB | Supabase（抽出履歴の保存） |
-| 音声合成 | Web Speech API（無料ティア）/ ElevenLabs（有料ティア） |
+| 翻訳 | Claude API(`@anthropic-ai/sdk`、Tool Use。既定モデル `claude-haiku-4-5-20251001`） |
+| 認証 | Better Auth(Google OAuthのみ） |
+| DB | Neon（サーバーレスPostgres。`@neondatabase/serverless`経由、ORM不使用） |
+| 音声合成 | ElevenLabs API |
 | PDF / OCR | pdf-parse、tesseract.js（テキストが取れない PDF への OCR フォールバック） |
+| PDF出力 | html2canvas、jsPDF（抽出結果・シャドーイング用テキストのPDFダウンロード） |
+| デプロイ先 | Vercel |
 
 ## 必要な環境変数
 
@@ -33,15 +36,15 @@ Google / LINE ログイン、抽出履歴の保存（Supabase）、無料・有�
 
 | 変数 | 用途 |
 |---|---|
-| `OLLAMA_BASE_URL` | Ollama サーバーの URL（既定 `http://localhost:11434`） |
-| `OLLAMA_MODEL` | 翻訳に使う Ollama モデル名（後述「モデルの選択」参照） |
-| `ELEVENLABS_API_KEY` | 有料ティアの音声合成（ElevenLabs）用 API キー |
-| `ELEVENLABS_VOICE_ID` | （任意）ElevenLabs のボイス ID。未設定時はコード内既定値を使用。`.env.example` には未記載なので必要なら追記する |
-| `NEXTAUTH_SECRET` | NextAuth のセッション暗号化用シークレット。`openssl rand -base64 32` で生成 |
-| `NEXTAUTH_URL` | アプリの URL（開発時は `http://localhost:3000`） |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth ログイン用（必須） |
-| `LINE_CHANNEL_ID` / `LINE_CHANNEL_SECRET` | LINE Login 用（任意。未設定なら LINE ログインは無効化される） |
-| `SUPABASE_URL` / `SUPABASE_ANON_KEY` | 抽出履歴を保存する Supabase プロジェクトの接続情報 |
+| `ANTHROPIC_API_KEY` | 翻訳(Claude API)用キー |
+| `ANTHROPIC_MODEL` | （任意）翻訳モデルの上書き。既定 `claude-haiku-4-5-20251001` |
+| `ELEVENLABS_API_KEY` | 音声合成(ElevenLabs)用キー |
+| `ELEVENLABS_VOICE_ID` | （任意）ElevenLabsのボイスID。未設定時はコード内既定値を使用 |
+| `DATABASE_URL` / `DATABASE_URL_UNPOOLED` | Neonの**所有者ロール**の接続文字列。`scripts/migrate.mjs`によるマイグレーション専用で、アプリの実行時コードからは使わない |
+| `DATABASE_URL_APP` | アプリが実際に使う、権限を絞った`app_user`ロールの接続文字列。手動で取得するのではなく`scripts/migrate.mjs`の初回実行時に自動生成・書き込みされる(後述) |
+| `BETTER_AUTH_SECRET` | Better Authのセッション暗号化用シークレット。`openssl rand -base64 32`で生成 |
+| `BETTER_AUTH_URL` | アプリのURL(開発時は`http://localhost:3000`) |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuthログイン用 |
 
 ## 主要コマンド
 
@@ -52,27 +55,29 @@ Google / LINE ログイン、抽出履歴の保存（Supabase）、無料・有�
 | `npm run build` | 本番ビルド |
 | `npm run start` | 本番サーバー起動 |
 | `npm run lint` | ESLint 実行 |
+| `node --env-file=.env.local scripts/migrate.mjs` | DBマイグレーション実行(初回セットアップ時のみ。後述) |
 
 ## ディレクトリ構成
 
 ```
 .
+├── db/
+│   └── migrations/           # DBマイグレーションSQL(番号順に適用)
+├── scripts/
+│   └── migrate.mjs           # db/migrations/ を順に実行するセットアップ用スクリプト
 ├── src/
 │   ├── app/
 │   │   ├── api/
-│   │   │   ├── auth/[...nextauth]/  # NextAuth ハンドラ
-│   │   │   ├── extract/             # PDF/TXT からのテキスト抽出（OCR フォールバック含む）
-│   │   │   ├── process/             # テキストのチャンク分割・翻訳
-│   │   │   ├── tts/                 # ElevenLabs 音声合成（有料ティア）
-│   │   │   └── history/             # 抽出履歴の CRUD（Supabase）
-│   │   ├── history/                 # 履歴一覧ページ（要ログイン）
-│   │   ├── page.tsx                 # トップページ（アップロード〜結果表示）
-│   │   ├── layout.tsx / providers.tsx
-│   │   └── globals.css
-│   ├── components/                  # UI コンポーネント（Header, AuthButton, SentenceCard 等）
-│   ├── lib/                         # llm.ts（Ollama 呼び出し）, auth.ts, db.ts, usage.ts, elevenlabs.ts, pdf-parser.ts
-│   └── types/                       # 共有型定義
-├── supabase-schema.sql              # Supabase 側で実行するテーブル定義（extractions）
+│   │   │   ├── auth/[...all]/  # Better Authハンドラ
+│   │   │   ├── documents/      # 処理結果(documents/sentences)の保存API
+│   │   │   ├── extract/        # PDF/TXTからのテキスト抽出(OCRフォールバック含む)
+│   │   │   ├── process/        # テキストのチャンク分割・翻訳(Claude API)
+│   │   │   └── tts/            # ElevenLabs音声合成
+│   │   ├── page.tsx           # トップページ(アップロード〜結果表示)
+│   │   └── layout.tsx
+│   ├── components/            # UIコンポーネント(Header, AuthButton, SentenceCard等)
+│   ├── lib/                   # llm.ts(Claude API), auth.ts, db.ts, documents.ts, elevenlabs.ts等
+│   └── types/                 # 共有型定義
 └── .env.example
 ```
 
@@ -80,101 +85,86 @@ Google / LINE ログイン、抽出履歴の保存（Supabase）、無料・有�
 
 ### 前提条件
 
-- Node.js（`package-lock.json` を使用。npm 想定）
-- Ollama（翻訳 LLM をローカルで動かすため）
-- Supabase プロジェクト（履歴保存用）
-- Google Cloud のOAuth クライアント（Google ログイン用）
+- Node.js v20 以上(`package-lock.json` を使用。npm 想定。`scripts/migrate.mjs` が Node 標準の `--env-file` を使うため v20.6 以降が必要)
+- Neonプロジェクト(DB用)
+- Google CloudのOAuthクライアント(Googleログイン用)
+- Anthropic・ElevenLabsのAPIキー
 
-### 1. Ollama を用意
+### 1. リポジトリをクローンし依存パッケージをインストール
 
-ネイティブアプリ（Mac で GPU/Metal を使え高速）か Docker のどちらでも可。
-
-**ネイティブ（推奨・高速）:**
 ```bash
-brew install ollama
-ollama serve            # http://localhost:11434 で待ち受け
-ollama pull qwen2.5:7b  # 約 4.7GB
+git clone git@github.com:Masaharu1223/EnglishPDF_changer.git
+cd EnglishPDF_changer
+npm install
 ```
 
-**Docker:**
-```bash
-docker run -d --name ollama-server -p 11434:11434 ollama/ollama
-docker exec ollama-server ollama pull qwen2.5:7b
-```
-> 注: macOS の Docker は GPU(Metal) を使えないため CPU 実行になり遅くなります。速度重視ならネイティブ版を使ってください。
+### 2. Neonプロジェクトを作成
 
-### 2. Supabase のセットアップ
+[neon.com](https://neon.com) でプロジェクトを作成し、`DATABASE_URL`・`DATABASE_URL_UNPOOLED`(所有者ロールの接続文字列)を取得する。
 
-Supabase プロジェクトの SQL Editor で `supabase-schema.sql` を実行し、`extractions` テーブルを作成する。
+> Vercel経由でNeonを使っている別プロジェクトが既にある場合、Neonのコンソールから直接新規プロジェクトを作成しようとすると `organization is managed by Vercel` というエラーになることがある。その場合はVercelダッシュボードの **Storage → Create Storage** から作成する(後述トラブルシューティング参照)。
 
-> **注意**: 現状のスキーマの RLS ポリシーは `USING (... OR true)` / `WITH CHECK (true)` となっており、実質的に誰でも全ユーザーの履歴を読み書き・削除できてしまう。本番運用前に `user_id` ベースの制限に修正が必要。
+### 3. Google OAuthクライアントを作成
 
-### 3. OAuth の設定
+Google Cloud Consoleで「Google Auth Platform」→「クライアント」から、アプリケーションの種類 **Web application** でOAuthクライアントを作成する。
 
-- **Google**: Google Cloud Console で OAuth クライアントを作成し、リダイレクト URI に `http://localhost:3000/api/auth/callback/google` を追加
-- **LINE**（任意）: LINE Developers で LINE Login チャネルを作成し、コールバック URL に `http://localhost:3000/api/auth/callback/line` を追加
+- 承認済みのJavaScript生成元: `http://localhost:3000`
+- 承認済みのリダイレクトURI: `http://localhost:3000/api/auth/callback/google`
 
 ### 4. 環境変数を設定
 
 ```bash
 cp .env.example .env.local
-# .env.local を編集して上記「必要な環境変数」を入力
 ```
 
-### 5. 依存パッケージのインストールと起動
+`.env.local` を編集し、上記「必要な環境変数」のうち `DATABASE_URL_APP` 以外(`ANTHROPIC_API_KEY`・`ELEVENLABS_API_KEY`・`DATABASE_URL`・`DATABASE_URL_UNPOOLED`・`GOOGLE_CLIENT_ID`・`GOOGLE_CLIENT_SECRET`)を入力する。`BETTER_AUTH_SECRET` は `openssl rand -base64 32` で生成した値を、`BETTER_AUTH_URL` には `http://localhost:3000` を設定する。`DATABASE_URL_APP` は空のままでよい(次のステップで自動生成される)。
+
+### 5. DBマイグレーションを実行
 
 ```bash
-npm install
+node --env-file=.env.local scripts/migrate.mjs
+```
+
+`db/migrations/` 配下のSQLを順に実行し、認証用テーブル・`documents`/`sentences`テーブル・RLSを設定したうえで、権限を絞った `app_user` ロールを作成する。生成したパスワードを含む接続文字列は **画面には出力されず**、`.env.local` の `DATABASE_URL_APP` に自動で書き込まれる。
+
+> このスクリプトは冪等ではない。同じDBに対して2回実行すると `CREATE TABLE` 等で失敗する。
+
+### 6. 開発サーバーを起動
+
+```bash
 npm run dev
 ```
 
 [http://localhost:3000](http://localhost:3000) を開く。
 
-## モデルの選択
-
-| モデル | サイズ | 特徴 |
-|---|---|---|
-| `qwen2.5:7b` | 約 4.7GB | 日本語翻訳のバランスが良い（README 上の既定） |
-| `qwen2.5:14b` | 約 9GB | さらに高精度・要メモリ |
-| `gemma3:4b` | 約 3.3GB | 軽量 |
-| `llama3.2:3b` | 約 2GB | 高速だが日本語は不安定（コード上のフォールバック既定） |
-
-`OLLAMA_MODEL` を変えるだけで切り替わる（モデルは事前に `ollama pull` しておくこと）。
-
-## 公開（ポートフォリオ用途）
-
-Vercel など PaaS にデプロイすると、そのサーバーから `localhost` の Ollama には届かない。ローカルの Ollama を使ったまま公開するには、Ollama を外部公開してトンネル経由でアクセスさせる:
-
-```bash
-brew install cloudflared
-cloudflared tunnel --url http://localhost:11434
-# 発行された https://xxxx.trycloudflare.com を OLLAMA_BASE_URL に設定
-```
-
-> ローカルマシンが起動・Ollama 稼働中のときだけ動作する。常時稼働サイトには不向き、デモ用途向け。
-
 ## 既知の制限・TODO
 
-- 無料/有料ティアの判定は `localStorage` のみで管理しており、サーバー側の検証がない（ブラウザの開発者ツールで簡単に回避できる）
-- 有料ティアへのアップグレード導線はダミー（`alert()` のみで決済は未実装）
-- Supabase の RLS ポリシーが実質無効化されている（上記「Supabase のセットアップ」参照）
-- `@auth/supabase-adapter` は依存関係に入っているが未使用（NextAuth はデータベースアダプタなしの JWT セッションのみ）
-- `@anthropic-ai/sdk` は依存関係に残っているが、翻訳処理は Ollama に置き換わり済みで未使用
+- 翻訳API(`/api/process`・`/api/tts`)は未ログインでも無制限に利用できる。公開運用する場合はサーバー側の利用回数制限が別途必要(未実装)
+- ログイン中のユーザーが保存できる件数に上限がない(Neon無料枠の保護のため将来的に必要)
+- 保存した処理結果を一覧・再表示する画面(`/history`)はまだない。現状は保存のみで、閲覧はDBを直接見る必要がある
 
 ## トラブルシューティング
 
-### `npm run dev` / `npm run build` が失敗する（構文エラー）
+### Neonで新規プロジェクトを作ろうとすると `organization is managed by Vercel` と出る
 
-現状 `src/components/AuthButton.tsx` の JSX に構文エラーがあり（`{session.user.image && ( {/* コメント */} <img ... /> )}` のように、JS 式の中に単独の JSX コメントを挟んでしまっている箇所がある）、`tsc --noEmit` でエラーになる。`AuthButton` を使う画面（`Header` 経由でほぼ全ページ）のビルドが通らないため、開発を始める前に該当コメントを `<img>` タグの直前に移す（または削除する）修正が必要。
+そのNeonアカウントが、別プロジェクトで既にVercel経由のNeon連携を使っている場合に起きる。Neonのコンソールからではなく、**Vercelダッシュボード → 対象プロジェクト → Storage → Create Storage** から作成する。
 
-### 翻訳実行時に「Failed to process text with the local LLM.」が返る
+### 本番で `[BetterAuthError]: You are using the default secret. Please set 'BETTER_AUTH_SECRET'` が出る
 
-`/api/process` の翻訳処理が失敗している。多くの場合 Ollama が起動していない・`OLLAMA_MODEL` で指定したモデルを `ollama pull` していないことが原因。`ollama serve` が起動しているか、`ollama list` でモデルが存在するかを確認する。
+Vercelの環境変数に `BETTER_AUTH_SECRET` が設定されていないか、設定後に**再デプロイしていない**ことが原因。Vercelは環境変数を保存した時点ではなく、デプロイ(ビルド)した時点で読み込むため、設定後は必ずRedeployが必要。
 
-### ログイン後にリダイレクトエラーになる（OAuth）
+### 本番でGoogleログインを押しても何も起きない
 
-Google Cloud Console / LINE Developers 側のリダイレクト URI・コールバック URL が `NEXTAUTH_URL`（例: `http://localhost:3000`）と一致していないことが多い。`/api/auth/callback/google`・`/api/auth/callback/line` のパスで正確に一致させる。
+`https://<プロジェクト名>-<ハッシュ>-<チーム名>.vercel.app` のような、デプロイごとに変わる個別URLからアクセスしている可能性がある。`BETTER_AUTH_URL` に設定した安定ドメイン(例: `https://english-pdf-changer.vercel.app`)からアクセスし直す。
 
-### 履歴が保存・表示されない
+### `scripts/migrate.mjs` が2回目の実行で失敗する
 
-`SUPABASE_URL` / `SUPABASE_ANON_KEY` が未設定、または Supabase 側で `supabase-schema.sql` を実行していないことが多い。ブラウザの開発者ツールで Supabase へのリクエストが 401/404 になっていないか確認する。
+想定通りの挙動(上記「開発環境の構築手順」参照)。スクリプトは冪等ではないため、スキーマを作り直したい場合はNeon側でテーブル・ロールを手動で削除してから再実行する。
+
+### 翻訳実行時にエラーが返る
+
+`ANTHROPIC_API_KEY` が未設定、または無効になっていないか確認する。
+
+### ログイン後にリダイレクトエラーになる
+
+Google Cloud Console側の承認済みリダイレクトURIが、`BETTER_AUTH_URL`(例: `http://localhost:3000`)+`/api/auth/callback/google` と完全に一致しているか確認する。
