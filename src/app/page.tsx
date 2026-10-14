@@ -131,9 +131,7 @@ export default function Home() {
         collected.push(...newSentences);
         setSentences((prev) => [...prev, ...newSentences]);
       } catch (chunkError) {
-        // Skip the failed chunk but keep going, matching the retry-free
-        // "log and continue" pattern already used in splitAndTranslate
-        // for the legacy bulk path.
+        // Skip the failed chunk but keep going (retry-free "log and continue").
         console.error(`Chunk ${i + 1}/${chunks.length} failed, skipping:`, chunkError);
       }
     }

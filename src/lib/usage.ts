@@ -163,3 +163,23 @@ export async function refundUsage(reservation: Reservation): Promise<void> {
     client.release();
   }
 }
+
+// 使用量は UTC の日付ごとに数えるので、次のUTC 0時(日本時間の9時)にリセットされる。
+// API間のやりとりは ISO 8601 で返す(日付・時刻の規約)。
+export function nextResetAtIso(now: Date = new Date()): string {
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)
+  ).toISOString();
+}
+
+// 上限を超えたときに画面へ出す案内。UIでは時刻のタイムゾーンを必ず明示する。
+export function limitMessage(subject: UsageSubject, reason: "personal" | "pool"): string {
+  const reset = "毎日 9:00(JST)にリセットされます。";
+  if (reason === "pool") {
+    return `現在、ご利用が集中しているため、全体の利用上限に達しました。上限は${reset}`;
+  }
+  if (subject.type === "anon") {
+    return `未ログインで使える本日の上限に達しました。ログインすると、より多く使えます。上限は${reset}`;
+  }
+  return `本日の利用上限に達しました。上限は${reset}`;
+}

@@ -45,6 +45,15 @@ Google ログインすると、処理結果(抽出した文とその翻訳)が N
 | `BETTER_AUTH_SECRET` | Better Authのセッション暗号化用シークレット。`openssl rand -base64 32`で生成 |
 | `BETTER_AUTH_URL` | アプリのURL(開発時は`http://localhost:3000`) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuthログイン用 |
+| `USAGE_LIMIT_ANON_IP_CHARS` | （任意）未ログインの同一IPが1日に翻訳できる文字数。既定 `12000` |
+| `USAGE_LIMIT_ANON_TOTAL_CHARS` | （任意）未ログイン全体の1日の合計上限。既定 `48000` |
+| `USAGE_LIMIT_USER_CHARS` | （任意）ログイン済みユーザー1人の1日の上限。既定 `30000` |
+| `USAGE_LIMIT_OTHERS_TOTAL_CHARS` | （任意）自分以外の全ユーザー(未ログイン+ログイン済み)の1日の合計上限。費用の天井。既定 `140000` |
+| `USAGE_LIMIT_OWNER_CHARS` | （任意）許可リストのアカウントの1日の上限(安全装置)。既定 `100000` |
+| `MAX_TRANSLATE_CHUNK_CHARS` | （任意）翻訳1リクエストで受け付ける最大文字数。既定 `2000` |
+| `FEATURE_ALLOWED_EMAILS` | （任意）試験導入の機能を使えるメールアドレス(カンマ区切り)。許可リストのアカウントは、上の全体上限に数えない。未設定なら誰にも許可しない |
+
+上限は1日(UTC。日本時間の毎日9:00にリセット)あたりの文字数で、`usage`テーブルに記録する。環境変数を変更したときは、Vercelで保存したあとRedeployしないと反映されない。
 
 ## 主要コマンド
 
@@ -139,7 +148,7 @@ npm run dev
 
 ## 既知の制限・TODO
 
-- 翻訳API(`/api/process`・`/api/tts`)は未ログインでも無制限に利用できる。公開運用する場合はサーバー側の利用回数制限が別途必要(未実装)
+- 翻訳API(`/api/process`)には、1日あたりの文字数の上限がある(未ログイン・ログイン済みで別枠。上限値と環境変数は上の表を参照)。音声合成(`/api/tts`)の利用制限・ログイン必須化は未対応
 - ログイン中のユーザーが保存できる件数に上限がない(Neon無料枠の保護のため将来的に必要)
 - 保存した処理結果を一覧・再表示する画面(`/history`)はまだない。現状は保存のみで、閲覧はDBを直接見る必要がある
 
