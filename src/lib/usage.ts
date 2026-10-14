@@ -164,6 +164,43 @@ export async function refundUsage(reservation: Reservation): Promise<void> {
   }
 }
 
+export interface RemainingUsage {
+  remaining: number;
+  limit: number;
+  constrainedBy: "personal" | "pool";
+}
+
+// 今日あと何文字使えるかを読み取る(予約はしない。画面に表示するためだけの値で、
+// 実際の判定は reserveUsage がサーバー側で行う)。個人の枠と全体の枠のうち、
+// 残りが最も小さいものを返す。
+export async function getRemainingUsage(
+  subject: UsageSubject,
+  kind: UsageKind
+): Promise<RemainingUsage> {
+  const buckets = bucketsFor(subject, getUsageLimits());
+  const res = await getPool().query(
+    `SELECT subject_key, amount FROM usage
+      WHERE subject_key = ANY($1::text[])
+        AND day = (now() AT TIME ZONE 'utc')::date
+        AND kind = $2::text`,
+    [buckets.map((b) => b.key), kind]
+  );
+  const used = new Map<string, number>(
+    res.rows.map((r) => [r.subject_key as string, r.amount as number])
+  );
+
+  let min = { remaining: Infinity, key: buckets[0].key };
+  for (const b of buckets) {
+    const remaining = Math.max(b.limit - (used.get(b.key) ?? 0), 0);
+    if (remaining < min.remaining) min = { remaining, key: b.key };
+  }
+  return {
+    remaining: min.remaining,
+    limit: buckets[0].limit, // 先頭は常に個人の枠
+    constrainedBy: reasonFor(min.key),
+  };
+}
+
 // 使用量は UTC の日付ごとに数えるので、次のUTC 0時(日本時間の9時)にリセットされる。
 // API間のやりとりは ISO 8601 で返す(日付・時刻の規約)。
 export function nextResetAtIso(now: Date = new Date()): string {

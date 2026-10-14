@@ -5,7 +5,10 @@ import FileUploader from "@/components/FileUploader";
 import SentenceList from "@/components/SentenceList";
 import ShadowingSheet from "@/components/ShadowingSheet";
 import RotatingText from "@/components/RotatingText";
+import UsageNotice from "@/components/UsageNotice";
+import { fetchUsage, useUsage } from "@/components/UsageProvider";
 import { useSession } from "@/lib/auth-client";
+import { overLimitMessage } from "@/lib/format";
 import type { Sentence, ProcessingState } from "@/types";
 
 type InputMode = "file" | "text";
@@ -17,6 +20,7 @@ const SENTENCES_STORAGE_KEY = "pdfex:sentences";
 
 export default function Home() {
   const { data: session } = useSession();
+  const { refresh: refreshUsage } = useUsage();
   const [sentences, setSentences] = useState<Sentence[]>([]);
   const [state, setState] = useState<ProcessingState>({ status: "idle" });
   const [inputMode, setInputMode] = useState<InputMode>("file");
@@ -91,6 +95,16 @@ export default function Home() {
     }
     const { chunks } = (await splitRes.json()) as { chunks: string[] };
 
+    // 翻訳を始める前に、今日の残りを超えないか確認して警告する。ここで止めれば、
+    // 途中で上限に当たって中途半端な結果になることを避けられる。表示のための事前チェックで、
+    // 実際の判定は翻訳APIがサーバー側で行う(取得できなければ、このチェックは省く)。
+    const totalChars = chunks.reduce((sum, c) => sum + c.length, 0);
+    const current = await fetchUsage();
+    if (current && totalChars > current.translate.remaining) {
+      void refreshUsage();
+      throw new Error(overLimitMessage(totalChars, current));
+    }
+
     // setSentences(prev => ...) only updates state, it doesn't let us read
     // the final list synchronously once the loop ends (stale closure) - so
     // collect the same items into a plain array in parallel for the save
@@ -101,6 +115,7 @@ export default function Home() {
     // multiple chunks concurrently is a separate future improvement (see
     // api-pivot-long-form.prd.md Phase 3) and out of scope here.
     let nextSentenceIndex = 0;
+    let limitMessage: string | null = null;
     for (let i = 0; i < chunks.length; i++) {
       setState({
         status: "processing",
@@ -115,6 +130,12 @@ export default function Home() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "translate", chunk: chunks[i] }),
         });
+        if (translateRes.status === 429) {
+          // 上限に達した。残りのチャンクも同じく断られるので、続けずに中断する。
+          const err = await translateRes.json().catch(() => ({}));
+          limitMessage = err.error || "利用上限に達しました。";
+          break;
+        }
         if (!translateRes.ok) {
           const err = await translateRes.json();
           throw new Error(err.error || "Failed to translate chunk");
@@ -134,6 +155,21 @@ export default function Home() {
         // Skip the failed chunk but keep going (retry-free "log and continue").
         console.error(`Chunk ${i + 1}/${chunks.length} failed, skipping:`, chunkError);
       }
+    }
+
+    void refreshUsage();
+
+    // 途中で上限に達したときは、案内を出して終わる。翻訳できた分は画面に残すが、
+    // 一部しか翻訳されていない結果を「完了」として履歴に保存しない。
+    if (limitMessage) {
+      setState({
+        status: "error",
+        error:
+          collected.length > 0
+            ? `途中で利用上限に達したため、翻訳を中断しました。${limitMessage} ここまでの結果は表示していますが、履歴には保存されません。`
+            : limitMessage,
+      });
+      return;
     }
 
     setState({
@@ -241,6 +277,8 @@ export default function Home() {
             />
           </p>
         </div>
+
+        <UsageNotice />
 
         <div>
           <div className="flex justify-center gap-2 mb-4">
