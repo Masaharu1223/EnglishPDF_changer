@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import type { PoolClient } from "@neondatabase/serverless";
 import { getPool } from "@/lib/db";
 import { isFeatureAllowed } from "@/lib/access";
 import { getClientIp } from "@/lib/client-ip";
@@ -140,8 +141,10 @@ export async function reserveUsage(
 // 日付をまたいでも別の日の使用量を減らさない。返却の失敗は、元のエラーの処理を邪魔しないよう
 // ログに残すだけにする(戻せなかった分は、その日の枠が少し余計に減るだけ)。
 export async function refundUsage(reservation: Reservation): Promise<void> {
-  const client = await getPool().connect();
+  // 接続の取得も含めて、例外処理の中に入れる(DBに繋がらないときも、元の処理を邪魔しない)
+  let client: PoolClient | undefined;
   try {
+    client = await getPool().connect();
     await client.query("BEGIN");
     for (const key of [...reservation.keys].sort()) {
       await client.query(
@@ -154,13 +157,13 @@ export async function refundUsage(reservation: Reservation): Promise<void> {
     await client.query("COMMIT");
   } catch (error) {
     try {
-      await client.query("ROLLBACK");
+      await client?.query("ROLLBACK");
     } catch {
       // 無視する
     }
     console.error("Failed to refund usage", error);
   } finally {
-    client.release();
+    client?.release();
   }
 }
 
