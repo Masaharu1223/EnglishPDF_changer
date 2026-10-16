@@ -95,6 +95,18 @@ ${chunk}`,
     ],
   });
 
+  // 費用の見積もり(1,000文字あたりのトークン数と単価)を実測で見直すためのログ。
+  // 本文は出さず、文字数とトークン数だけを残す。
+  console.info(
+    "claude_usage",
+    JSON.stringify({
+      model: CLAUDE_MODEL,
+      chunk_chars: chunk.length,
+      input_tokens: response.usage.input_tokens,
+      output_tokens: response.usage.output_tokens,
+    })
+  );
+
   const toolUseBlock = response.content.find(
     (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
   );
@@ -107,33 +119,4 @@ ${chunk}`,
     throw new Error("Unexpected JSON structure from Claude");
   }
   return parsed.sentences;
-}
-
-export async function splitAndTranslate(text: string): Promise<SentencePair[]> {
-  const cleaned = cleanText(text);
-  const chunks = splitIntoChunks(cleaned);
-  const results: SentencePair[] = [];
-
-  for (const chunk of chunks) {
-    try {
-      const pairs = await processChunk(chunk);
-      results.push(...pairs);
-    } catch (error) {
-      console.error("Chunk processing failed, skipping:", error);
-      // Continue with other chunks instead of failing entirely
-    }
-  }
-
-  if (results.length === 0) {
-    throw new Error("Failed to process any text chunks");
-  }
-
-  // Deduplicate by original text
-  const seen = new Set<string>();
-  return results.filter((pair) => {
-    const key = pair.original.toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
