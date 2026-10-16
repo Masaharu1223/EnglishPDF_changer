@@ -142,6 +142,18 @@ describe("limitMessage(上限を超えたときの案内)", () => {
     expect(limitMessage({ type: "user", userId: "u" }, "personal")).not.toContain("ログイン");
   });
 
+  it("busy(DBが混み合って予約できなかった)は、上限超過とは別の文面。リセット時刻やログインの案内は出さない", () => {
+    for (const subject of [
+      { type: "anon", ip: "x" },
+      { type: "user", userId: "u" },
+    ] as const) {
+      const msg = limitMessage(subject, "busy");
+      expect(msg).toContain("アクセスが集中");
+      expect(msg).not.toContain("JST");
+      expect(msg).not.toContain("ログイン");
+    }
+  });
+
   it("全体の上限は、個人の上限とは別の文面にする", () => {
     const pool = limitMessage({ type: "user", userId: "u" }, "pool");
     expect(pool).toContain("全体");

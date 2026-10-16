@@ -12,6 +12,7 @@ describe("getUsageLimits", () => {
       othersTotalChars: 140_000,
       ownerChars: 100_000,
       maxTranslateChunkChars: 2_000,
+      lockTimeoutMs: 5_000,
     });
   });
 
@@ -28,6 +29,20 @@ describe("getUsageLimits", () => {
     (bad) => {
       vi.stubEnv("USAGE_LIMIT_ANON_IP_CHARS", bad);
       expect(getUsageLimits().anonIpChars).toBe(12_000);
+    }
+  );
+
+  it("ロックの待ち時間(ミリ秒)は、既定5秒で、環境変数 USAGE_LOCK_TIMEOUT_MS で変えられる", () => {
+    expect(getUsageLimits().lockTimeoutMs).toBe(5_000);
+    vi.stubEnv("USAGE_LOCK_TIMEOUT_MS", "1000");
+    expect(getUsageLimits().lockTimeoutMs).toBe(1000);
+  });
+
+  it.each(["0", "-1", "abc", "1.5"])(
+    "ロックの待ち時間の不正な値(%j)は無視して既定値にする(待ち時間なし・無限にならない)",
+    (bad) => {
+      vi.stubEnv("USAGE_LOCK_TIMEOUT_MS", bad);
+      expect(getUsageLimits().lockTimeoutMs).toBe(5_000);
     }
   );
 

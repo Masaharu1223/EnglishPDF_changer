@@ -179,6 +179,22 @@ describe("POST /api/process: 上限を超えたとき(429)", () => {
     expect(mocks.refundUsage).not.toHaveBeenCalled(); // 予約できていないので、返却するものがない
   });
 
+  it("DBが混み合って予約できなかったとき(busy): 429 で、数秒後の再試行を促す。リセット時刻は返さない", async () => {
+    mocks.reserveUsage.mockResolvedValue({ ok: false, reason: "busy" });
+    const res = await call({ action: "translate", chunk: "Hello." });
+    expect(res.status).toBe(429);
+
+    const body = await res.json();
+    expect(body.reason).toBe("busy");
+    expect(body.error).toContain("アクセスが集中");
+    expect(body.error).not.toContain("JST");
+    expect("resetAt" in body).toBe(false);
+    expect(res.headers.get("Retry-After")).toBe("5");
+
+    expect(mocks.processChunk).not.toHaveBeenCalled();
+    expect(mocks.refundUsage).not.toHaveBeenCalled();
+  });
+
   it("全体の上限: reason は pool で、文面が個人の上限と異なる", async () => {
     mocks.reserveUsage.mockResolvedValue({ ok: false, reason: "pool" });
     const body = await (await call({ action: "translate", chunk: "Hello." })).json();

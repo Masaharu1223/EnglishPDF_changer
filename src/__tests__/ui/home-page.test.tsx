@@ -182,7 +182,7 @@ describe("ホーム画面: 途中で上限(429)に達したとき", () => {
     render(<Home />);
     submit();
 
-    const banner = await screen.findByText(/途中で利用上限に達したため、翻訳を中断しました/);
+    const banner = await screen.findByText(/途中で翻訳を中断しました/);
     expect(banner.textContent).toContain("9:00(JST)"); // サーバーの案内をそのまま表示
     expect(banner.textContent).toContain("履歴には保存されません");
 
@@ -195,6 +195,23 @@ describe("ホーム画面: 途中で上限(429)に達したとき", () => {
     expect(screen.getByText("Extracted Sentences (1)")).toBeTruthy();
     // 残りの表示を最新にする
     expect(mocks.refresh).toHaveBeenCalled();
+  });
+
+  it("DBが混み合っていて429(busy)のときも、同じように中断し、履歴には保存しない", async () => {
+    mocks.session.data = { user: { id: "u1" } };
+    translateHandler = (n) =>
+      n === 1
+        ? translated(1)
+        : json({ error: "現在、アクセスが集中しています。少し時間をおいて、もう一度お試しください。", reason: "busy" }, 429);
+
+    render(<Home />);
+    submit();
+
+    const banner = await screen.findByText(/途中で翻訳を中断しました/);
+    expect(banner.textContent).toContain("アクセスが集中しています");
+    expect(banner.textContent).toContain("履歴には保存されません");
+    expect(callsTo("/api/process", "translate")).toHaveLength(2); // 続けて叩かない
+    expect(callsTo("/api/documents")).toHaveLength(0);
   });
 
   it("最初のチャンクで429: 結果は空で、サーバーの案内だけを出す(「ここまでの結果」とは言わない)", async () => {

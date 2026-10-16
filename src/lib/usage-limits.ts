@@ -19,6 +19,9 @@ export interface UsageLimits {
   ownerChars: number;
   // 翻訳1リクエストで受け付ける chunk の最大文字数(通常の分割は1,500文字)
   maxTranslateChunkChars: number;
+  // 他のリクエストが持つ行のロックを待つ最大時間(ミリ秒)。詰まったとき、いつまでも
+  // 待たせず、数秒で諦めて断る(使い放題にならない側に倒す)
+  lockTimeoutMs: number;
 }
 
 function readLimit(name: string, fallback: number): number {
@@ -36,5 +39,6 @@ export function getUsageLimits(): UsageLimits {
     othersTotalChars: readLimit("USAGE_LIMIT_OTHERS_TOTAL_CHARS", 140_000),
     ownerChars: readLimit("USAGE_LIMIT_OWNER_CHARS", 100_000),
     maxTranslateChunkChars: readLimit("MAX_TRANSLATE_CHUNK_CHARS", 2_000),
+    lockTimeoutMs: readLimit("USAGE_LOCK_TIMEOUT_MS", 5_000),
   };
 }

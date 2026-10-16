@@ -274,6 +274,95 @@ describe.skipIf(!db)("usage テーブルの予約・返却(本物のPostgres)", 
     });
   });
 
+  describe("ロックの待ち時間(詰まったときは、数秒で諦めて断る)", () => {
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    // 別の接続で「全体の枠」の行をロックしたままにして、他のリクエストが詰まる状況を作る
+    const seedAndLockPool = async () => {
+      await owner.query(
+        "insert into usage (subject_key, day, kind, amount) values ('others:*', (now() at time zone 'utc')::date, 'translate_chars', 50)"
+      );
+      const holder = await owner.connect();
+      await holder.query("BEGIN");
+      await holder.query("select 1 from usage where subject_key = 'others:*' for update");
+      return {
+        release: async () => {
+          try {
+            await holder.query("ROLLBACK");
+          } finally {
+            holder.release();
+          }
+        },
+      };
+    };
+
+    it("ロックを待ち切れなければ、例外ではなく busy を返す。待つのは設定した時間だけで、何も消費しない", async () => {
+      vi.stubEnv("USAGE_LOCK_TIMEOUT_MS", "1000");
+      const lock = await seedAndLockPool();
+      const started = Date.now();
+      let res: unknown;
+      try {
+        res = await Promise.race([
+          usage.reserveUsage(user(), "translate_chars", 100),
+          sleep(8000).then(() => "stuck"), // 待ち時間の上限が効かないと、ここまで固まる
+        ]);
+      } finally {
+        await lock.release();
+      }
+      const elapsed = Date.now() - started;
+
+      expect(res).toEqual({ ok: false, reason: "busy" });
+      expect(elapsed).toBeGreaterThanOrEqual(900); // 設定した時間は待った
+      expect(elapsed).toBeLessThan(6000); // いつまでも待たない
+      expect(await amount("others:*")).toBe(50); // 何も消費していない
+      expect(await allRows()).toHaveLength(1); // 個人の行も作られていない
+    });
+
+    it("ロックが外れたあとは、また予約できる", async () => {
+      vi.stubEnv("USAGE_LOCK_TIMEOUT_MS", "1000");
+      const lock = await seedAndLockPool();
+      const first = await usage.reserveUsage(user(), "translate_chars", 100);
+      await lock.release();
+      expect(first).toEqual({ ok: false, reason: "busy" });
+
+      expect((await usage.reserveUsage(user(), "translate_chars", 100)).ok).toBe(true);
+      expect(await amount("others:*")).toBe(150);
+    });
+
+    it("短い詰まりなら、待っているうちに解消して、通常どおり予約できる(すぐには諦めない)", async () => {
+      vi.stubEnv("USAGE_LOCK_TIMEOUT_MS", "5000");
+      const lock = await seedAndLockPool();
+      const pending = usage.reserveUsage(user(), "translate_chars", 100);
+      await sleep(800);
+      await lock.release();
+
+      expect((await pending).ok).toBe(true);
+      expect(await amount("others:*")).toBe(150);
+    });
+
+    it("返却がロックで詰まっても、例外にならず、数秒で諦める(元の処理を邪魔しない)", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      vi.stubEnv("USAGE_LOCK_TIMEOUT_MS", "1000");
+      const lock = await seedAndLockPool();
+      const day = (await owner.query("select (now() at time zone 'utc')::date::text as d")).rows[0].d;
+      try {
+        await expect(
+          usage.refundUsage({ keys: ["others:*"], day, kind: "translate_chars", amount: 10 })
+        ).resolves.toBeUndefined();
+      } finally {
+        await lock.release();
+      }
+      expect(await amount("others:*")).toBe(50); // 返却できなかったので、そのまま
+    });
+
+    it("待ち時間の設定は、そのトランザクションの中だけ(使い回される接続に残らない)", async () => {
+      vi.stubEnv("USAGE_LOCK_TIMEOUT_MS", "1000");
+      await usage.reserveUsage(user(), "translate_chars", 100);
+      const shown = await dbModule.getPool().query("show lock_timeout");
+      expect(shown.rows[0].lock_timeout).toBe("0"); // 既定(無制限)のまま
+    });
+  });
+
   describe("権限と失敗時の挙動", () => {
     it("アプリ用ロール(app_user)は、使用量の行を消せない・テーブルを空にできない", async () => {
       await usage.reserveUsage(user(), "translate_chars", 100);

@@ -91,9 +91,26 @@ export interface Reservation {
   amount: number;
 }
 
+// busy: 他のリクエストのロックを待ち切れなかった(または、デッドロックとして取り消された)。
+// 上限を超えたわけではないので、少し待って、もう一度試せばよい。
 export type ReserveResult =
   | { ok: true; reservation: Reservation }
-  | { ok: false; reason: "personal" | "pool" };
+  | { ok: false; reason: "personal" | "pool" | "busy" };
+
+// Postgres のエラーコード: 55P03 = ロックの待ち時間切れ、40P01 = デッドロックで取り消し
+function isBusyError(error: unknown): boolean {
+  const code = (error as { code?: string } | null)?.code;
+  return code === "55P03" || code === "40P01";
+}
+
+// SET LOCAL は、パラメータ($1)を取れないので、検証済みの整数をそのまま埋め込む。
+// BEGIN と同じ1回の通信で送るので、往復は増えない(このトランザクションの中だけで有効)。
+function beginWithLockTimeout(lockTimeoutMs: number): string {
+  if (!Number.isInteger(lockTimeoutMs) || lockTimeoutMs <= 0) {
+    throw new Error("lockTimeoutMs must be a positive integer");
+  }
+  return `BEGIN; SET LOCAL lock_timeout = ${lockTimeoutMs}`;
+}
 
 // 全バケットを1つのトランザクションで予約する。どれか1つでも上限を超えたら全体を
 // ロールバックし、片方だけ消費されることがない。同時リクエストがお互いを待ち合って
@@ -107,13 +124,14 @@ export async function reserveUsage(
     throw new Error("amount must be a positive integer");
   }
 
-  const buckets = bucketsFor(subject, getUsageLimits()).sort((a, b) =>
+  const limits = getUsageLimits();
+  const buckets = bucketsFor(subject, limits).sort((a, b) =>
     a.key < b.key ? -1 : a.key > b.key ? 1 : 0
   );
 
   const client = await getPool().connect();
   try {
-    await client.query("BEGIN");
+    await client.query(beginWithLockTimeout(limits.lockTimeoutMs));
     let day = "";
     for (const bucket of buckets) {
       const res = await client.query(RESERVE_SQL, [bucket.key, kind, amount, bucket.limit]);
@@ -131,6 +149,8 @@ export async function reserveUsage(
     } catch {
       // 接続が既に切れている場合は無視する(元のエラーを優先する)
     }
+    // 待ち時間切れ・デッドロックは、予約できなかっただけ。例外にせず「混み合っている」と返す
+    if (isBusyError(error)) return { ok: false, reason: "busy" };
     throw error;
   } finally {
     client.release();
@@ -145,7 +165,7 @@ export async function refundUsage(reservation: Reservation): Promise<void> {
   let client: PoolClient | undefined;
   try {
     client = await getPool().connect();
-    await client.query("BEGIN");
+    await client.query(beginWithLockTimeout(getUsageLimits().lockTimeoutMs));
     for (const key of [...reservation.keys].sort()) {
       await client.query(
         `UPDATE usage
@@ -213,7 +233,13 @@ export function nextResetAtIso(now: Date = new Date()): string {
 }
 
 // 上限を超えたときに画面へ出す案内。UIでは時刻のタイムゾーンを必ず明示する。
-export function limitMessage(subject: UsageSubject, reason: "personal" | "pool"): string {
+export function limitMessage(
+  subject: UsageSubject,
+  reason: "personal" | "pool" | "busy"
+): string {
+  if (reason === "busy") {
+    return "現在、アクセスが集中しています。少し時間をおいて、もう一度お試しください。";
+  }
   const reset = "毎日 9:00(JST)にリセットされます。";
   if (reason === "pool") {
     return `現在、ご利用が集中しているため、全体の利用上限に達しました。上限は${reset}`;

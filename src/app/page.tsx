@@ -166,7 +166,7 @@ export default function Home() {
         status: "error",
         error:
           collected.length > 0
-            ? `途中で利用上限に達したため、翻訳を中断しました。${limitMessage} ここまでの結果は表示していますが、履歴には保存されません。`
+            ? `途中で翻訳を中断しました。${limitMessage} ここまでの結果は表示していますが、履歴には保存されません。`
             : limitMessage,
       });
       return;

@@ -53,6 +53,14 @@ export async function POST(request: NextRequest) {
       const subject = subjectFor(session, request.headers);
       const reserved = await reserveUsage(subject, "translate_chars", chunk.length);
       if (!reserved.ok) {
+        // busy は上限を超えたのではなく、DBが混み合って予約できなかっただけ。
+        // リセット時刻は無関係なので返さず、数秒後の再試行を促す。
+        if (reserved.reason === "busy") {
+          return NextResponse.json(
+            { error: limitMessage(subject, "busy"), reason: "busy" },
+            { status: 429, headers: { "Retry-After": "5" } }
+          );
+        }
         const resetAt = nextResetAtIso();
         const retryAfter = Math.max(
           1,
