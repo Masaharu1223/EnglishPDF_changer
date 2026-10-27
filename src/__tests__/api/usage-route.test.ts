@@ -37,6 +37,13 @@ describe("GET /api/usage(画面に残量を出すための読み取り専用API)
     expect(new Date(body.translate.resetAt).toISOString()).toBe(body.translate.resetAt);
   });
 
+  it("1リクエストの最低課金(minCharge)も返す(画面の事前チェックを、サーバーの課金と揃えるため)", async () => {
+    const body = await (await call()).json();
+    expect(body.translate.minCharge).toBe(500);
+    vi.stubEnv("USAGE_MIN_CHARGE_CHARS", "200");
+    expect((await (await call()).json()).translate.minCharge).toBe(200);
+  });
+
   it("未ログインの主体(IPつき)で、翻訳の残量を問い合わせる", async () => {
     await call({ "x-forwarded-for": "198.51.100.7" });
     expect(mocks.getRemainingUsage).toHaveBeenCalledWith(

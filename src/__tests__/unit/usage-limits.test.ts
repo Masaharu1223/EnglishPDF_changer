@@ -13,7 +13,20 @@ describe("getUsageLimits", () => {
       ownerChars: 100_000,
       maxTranslateChunkChars: 2_000,
       lockTimeoutMs: 5_000,
+      minChargeChars: 500,
     });
+  });
+
+  it("最低課金(文字数)は、環境変数 USAGE_MIN_CHARGE_CHARS で変えられる", () => {
+    vi.stubEnv("USAGE_MIN_CHARGE_CHARS", "300");
+    expect(getUsageLimits().minChargeChars).toBe(300);
+  });
+
+  it("int32 を超える値は無視して既定値にする(DBの int に入らず全リクエストが500になるのを防ぐ)", () => {
+    vi.stubEnv("USAGE_LIMIT_USER_CHARS", "2147483648");
+    expect(getUsageLimits().userChars).toBe(30_000);
+    vi.stubEnv("USAGE_LIMIT_USER_CHARS", "2147483647");
+    expect(getUsageLimits().userChars).toBe(2_147_483_647);
   });
 
   it("正の整数なら、環境変数で上書きできる", () => {

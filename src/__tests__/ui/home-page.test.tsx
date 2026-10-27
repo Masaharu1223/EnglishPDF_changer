@@ -37,7 +37,7 @@ const limitReached = () =>
 const usage = (remaining: number): UsageInfo => ({
   loggedIn: false,
   capabilities: { tts: false },
-  translate: { remaining, limit: 12_000, constrainedBy: "personal", resetAt: "2026-10-16T00:00:00.000Z" },
+  translate: { remaining, limit: 12_000, minCharge: 500, constrainedBy: "personal", resetAt: "2026-10-16T00:00:00.000Z" },
 });
 
 const callsTo = (url: string, action?: string) =>
@@ -109,12 +109,30 @@ describe("ホーム画面: 翻訳を始める前の警告", () => {
   });
 
   it("残りとちょうど同じ文字数なら、警告せずに翻訳する(境界)", async () => {
-    chunks = ["a".repeat(200)];
-    mocks.fetchUsage.mockResolvedValue(usage(200));
+    chunks = ["a".repeat(600)];
+    mocks.fetchUsage.mockResolvedValue(usage(600));
     render(<Home />);
     submit();
     expect(await screen.findByText("Extracted Sentences (1)")).toBeTruthy();
     expect(callsTo("/api/process", "translate")).toHaveLength(1);
+  });
+
+  it("短いチャンクは最低課金(500文字)で数える。実際の文字数だけで見ると足りるように見えても警告する", async () => {
+    chunks = ["Short one.", "Short two.", "Short three."]; // 実際は30文字ほどだが、課金は 500×3 = 1,500
+    mocks.fetchUsage.mockResolvedValue(usage(1_000));
+    render(<Home />);
+    submit();
+    const msg = await screen.findByText(/翻訳を始めませんでした/);
+    expect(msg.textContent).toContain("1,500文字");
+    expect(callsTo("/api/process", "translate")).toHaveLength(0);
+  });
+
+  it("最低課金で数えても残りに収まるなら、翻訳する(境界)", async () => {
+    chunks = ["Short one.", "Short two."];
+    mocks.fetchUsage.mockResolvedValue(usage(1_000));
+    render(<Home />);
+    submit();
+    expect(await screen.findByText("Extracted Sentences (2)")).toBeTruthy();
   });
 
   it("残りを取得できなければ、事前チェックは省いて翻訳する(最終判定はサーバーが行う)", async () => {
@@ -235,18 +253,41 @@ describe("ホーム画面: 途中で上限(429)に達したとき", () => {
   });
 });
 
-describe("ホーム画面: 429以外のチャンクの失敗(従来どおりの挙動を固定する)", () => {
-  it("失敗したチャンクだけ飛ばして続け、翻訳できた分を保存する", async () => {
+describe("ホーム画面: 429以外のチャンクの失敗(一部が抜けた結果を「完了」として保存しない)", () => {
+  it("失敗したチャンクだけ飛ばして続けるが、結果は表示するだけで、履歴には保存しない", async () => {
     mocks.session.data = { user: { id: "u1" } };
     translateHandler = (n) => (n === 2 ? json({ error: "x" }, 500) : translated(n));
 
     render(<Home />);
     submit();
 
-    expect(await screen.findByText("履歴に保存しました")).toBeTruthy();
+    expect(await screen.findByText(/1個のチャンクを翻訳できませんでした/)).toBeTruthy();
     expect(callsTo("/api/process", "translate")).toHaveLength(3); // 止まらない
-    expect(screen.getByText("Extracted Sentences (2)")).toBeTruthy();
-    const saved = callsTo("/api/documents")[0].body.sentences as { original: string }[];
-    expect(saved.map((s) => s.original)).toEqual(["Sentence 1.", "Sentence 3."]);
+    expect(screen.getByText("Extracted Sentences (2)")).toBeTruthy(); // 翻訳できた分は見える
+    expect(callsTo("/api/documents")).toHaveLength(0); // 抜けのある結果は保存しない
+    expect(screen.queryByText("履歴に保存しました")).toBeNull();
+  });
+
+  it("連続して3回失敗したら中断する(DB障害などで、全チャンクを叩き続けない)", async () => {
+    chunks = ["One.", "Two.", "Three.", "Four.", "Five."];
+    translateHandler = () => json({ error: "x" }, 500);
+
+    render(<Home />);
+    submit();
+
+    expect(await screen.findByText(/翻訳できませんでした/)).toBeTruthy();
+    expect(callsTo("/api/process", "translate")).toHaveLength(3);
+    expect(callsTo("/api/documents")).toHaveLength(0);
+  });
+
+  it("成功をはさむと、連続の数え直し(失敗→成功→失敗→失敗 は中断しない)", async () => {
+    chunks = ["One.", "Two.", "Three.", "Four.", "Five."];
+    translateHandler = (n) => (n === 2 || n === 4 || n === 5 ? json({ error: "x" }, 500) : translated(n));
+
+    render(<Home />);
+    submit();
+
+    expect(await screen.findByText(/3個のチャンクを翻訳できませんでした/)).toBeTruthy();
+    expect(callsTo("/api/process", "translate")).toHaveLength(5);
   });
 });

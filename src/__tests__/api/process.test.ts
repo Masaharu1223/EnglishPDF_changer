@@ -25,6 +25,7 @@ vi.mock("@/lib/usage", async (importOriginal) => ({
 }));
 
 import { POST } from "@/app/api/process/route";
+import { ClaudeResponseError } from "@/lib/llm";
 
 const call = (body: unknown, headers: Record<string, string> = {}) =>
   POST(
@@ -108,9 +109,33 @@ describe("POST /api/process: translate 予約 → Claude の順序", () => {
     expect(mocks.refundUsage).not.toHaveBeenCalled();
   });
 
-  it("予約する量は、chunk の文字数そのもの", async () => {
+  it("予約する量は、chunk の文字数。ただし短くても最低課金(既定500文字)を予約する", async () => {
+    await call({ action: "translate", chunk: "a".repeat(1200) });
+    expect(mocks.reserveUsage).toHaveBeenLastCalledWith(expect.anything(), "translate_chars", 1200);
     await call({ action: "translate", chunk: "Hello." });
-    expect(mocks.reserveUsage).toHaveBeenCalledWith(expect.anything(), "translate_chars", 6);
+    expect(mocks.reserveUsage).toHaveBeenLastCalledWith(expect.anything(), "translate_chars", 500);
+    await call({ action: "translate", chunk: "a".repeat(500) });
+    expect(mocks.reserveUsage).toHaveBeenLastCalledWith(expect.anything(), "translate_chars", 500);
+  });
+
+  it("最低課金は環境変数 USAGE_MIN_CHARGE_CHARS で変えられる", async () => {
+    vi.stubEnv("USAGE_MIN_CHARGE_CHARS", "100");
+    await call({ action: "translate", chunk: "Hello." });
+    expect(mocks.reserveUsage).toHaveBeenLastCalledWith(expect.anything(), "translate_chars", 100);
+  });
+
+  it.each([" ", "   \n\t  "])("空白だけの chunk(%j)は 400。予約もClaudeも呼ばない", async (chunk) => {
+    const res = await call({ action: "translate", chunk });
+    expect(res.status).toBe(400);
+    expect(mocks.reserveUsage).not.toHaveBeenCalled();
+    expect(mocks.processChunk).not.toHaveBeenCalled();
+  });
+
+  it("Claudeが応答したあとの失敗(解析できない・出力が途中で切れた等)は、課金済みなので返却しない", async () => {
+    mocks.processChunk.mockRejectedValue(new ClaudeResponseError("No tool_use block"));
+    const res = await call({ action: "translate", chunk: "Hello." });
+    expect(res.status).toBe(500);
+    expect(mocks.refundUsage).not.toHaveBeenCalled();
   });
 
   it("予約が、Claudeを呼ぶより先に行われる", async () => {

@@ -19,6 +19,7 @@ const usage = (
   translate: {
     remaining: 8_000,
     limit: 12_000,
+    minCharge: 500,
     constrainedBy: "personal",
     resetAt: "2026-10-16T00:00:00.000Z",
     ...translate,
@@ -83,5 +84,13 @@ describe("UsageNotice(今日の残りの表示)", () => {
     expect((container.firstChild as HTMLElement).className).toContain("amber");
     expect(container.textContent).toContain("0");
     expect(container.textContent).not.toContain("全体の利用上限");
+  });
+});
+
+describe("UsageNotice: 最低課金の注記", () => {
+  it("短いテキストでも最低課金があることを伝える(残りが思ったより減る理由が分かる)", () => {
+    mocks.usage = usage({ remaining: 5_000 });
+    const { container } = render(<UsageNotice />);
+    expect(container.textContent).toContain("最低 500 文字分として数えます");
   });
 });

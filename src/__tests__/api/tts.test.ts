@@ -73,6 +73,13 @@ describe("POST /api/tts(試験導入: 許可リストのアカウントだけ)",
     expect(mocks.generateSpeech).not.toHaveBeenCalled();
   });
 
+  it("text が長すぎる(5,000文字超)なら 413。ElevenLabs を呼ばない。ちょうど5,000文字は通す", async () => {
+    mocks.getSession.mockResolvedValue(user("owner@example.com"));
+    expect((await call({ text: "a".repeat(5001) })).status).toBe(413);
+    expect(mocks.generateSpeech).not.toHaveBeenCalled();
+    expect((await call({ text: "a".repeat(5000) })).status).toBe(200);
+  });
+
   it("ElevenLabs が失敗したら 500(内部のエラーは返さない)", async () => {
     mocks.getSession.mockResolvedValue(user("owner@example.com"));
     mocks.generateSpeech.mockRejectedValue(new Error("secret internal detail"));

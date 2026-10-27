@@ -17,6 +17,8 @@ type SourceType = "pdf" | "txt" | "paste";
 type SaveState = "idle" | "saving" | "saved" | "error";
 
 const SENTENCES_STORAGE_KEY = "pdfex:sentences";
+// 429 以外の失敗がこの回数だけ続いたら、残りのチャンクを叩かずに中断する
+const MAX_CONSECUTIVE_FAILURES = 3;
 
 export default function Home() {
   const { data: session } = useSession();
@@ -98,8 +100,10 @@ export default function Home() {
     // 翻訳を始める前に、今日の残りを超えないか確認して警告する。ここで止めれば、
     // 途中で上限に当たって中途半端な結果になることを避けられる。表示のための事前チェックで、
     // 実際の判定は翻訳APIがサーバー側で行う(取得できなければ、このチェックは省く)。
-    const totalChars = chunks.reduce((sum, c) => sum + c.length, 0);
+    // サーバーは短いチャンクにも最低課金(minCharge)をかけるので、ここでも同じ数え方にする。
     const current = await fetchUsage();
+    const minCharge = current?.translate.minCharge ?? 0;
+    const totalChars = chunks.reduce((sum, c) => sum + Math.max(c.length, minCharge), 0);
     if (current && totalChars > current.translate.remaining) {
       void refreshUsage();
       throw new Error(overLimitMessage(totalChars, current));
@@ -116,6 +120,12 @@ export default function Home() {
     // api-pivot-long-form.prd.md Phase 3) and out of scope here.
     let nextSentenceIndex = 0;
     let limitMessage: string | null = null;
+    // 429 以外の失敗(サーバーの不具合・DB障害など)は、そのチャンクを飛ばして続ける。ただし
+    // 抜けのある結果を「完了」として保存しないよう数えておく。連続して失敗するときは、
+    // 残りも同じ理由で失敗する可能性が高いので、叩き続けずに中断する。
+    let failedChunks = 0;
+    let consecutiveFailures = 0;
+    let aborted = false;
     for (let i = 0; i < chunks.length; i++) {
       setState({
         status: "processing",
@@ -151,9 +161,16 @@ export default function Home() {
         }));
         collected.push(...newSentences);
         setSentences((prev) => [...prev, ...newSentences]);
+        consecutiveFailures = 0;
       } catch (chunkError) {
         // Skip the failed chunk but keep going (retry-free "log and continue").
         console.error(`Chunk ${i + 1}/${chunks.length} failed, skipping:`, chunkError);
+        failedChunks += 1;
+        consecutiveFailures += 1;
+        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+          aborted = true;
+          break;
+        }
       }
     }
 
@@ -168,6 +185,22 @@ export default function Home() {
           collected.length > 0
             ? `途中で翻訳を中断しました。${limitMessage} ここまでの結果は表示していますが、履歴には保存されません。`
             : limitMessage,
+      });
+      return;
+    }
+
+    // 一部のチャンクが翻訳できなかったときも、翻訳できた分は表示するが、抜けのある結果は
+    // 「完了」として履歴に保存しない。
+    if (failedChunks > 0) {
+      setState({
+        status: "error",
+        error:
+          `${failedChunks}個のチャンクを翻訳できませんでした。` +
+          (aborted ? "続けて失敗したため、翻訳を中断しました。" : "") +
+          (collected.length > 0
+            ? "翻訳できた分は表示していますが、一部が抜けているため履歴には保存されません。"
+            : "") +
+          "時間をおいて、もう一度お試しください。",
       });
       return;
     }

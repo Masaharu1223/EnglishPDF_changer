@@ -14,7 +14,7 @@ import { UsageProvider, fetchUsage, useUsage } from "@/components/UsageProvider"
 const info = (remaining: number, loggedIn = false): UsageInfo => ({
   loggedIn,
   capabilities: { tts: false },
-  translate: { remaining, limit: 12_000, constrainedBy: "personal", resetAt: "2026-10-16T00:00:00.000Z" },
+  translate: { remaining, limit: 12_000, minCharge: 500, constrainedBy: "personal", resetAt: "2026-10-16T00:00:00.000Z" },
 });
 const ok = (body: unknown) => ({ ok: true, json: async () => body });
 
@@ -90,6 +90,18 @@ describe("UsageProvider", () => {
     });
     expect(returned).toEqual(info(7_000));
     expect(result.current.usage?.translate.remaining).toBe(7_000);
+  });
+
+  it("refresh() の取得に失敗したら、前回の値を残す(表示が消えたり、音声ボタンが無効になったりしない)", async () => {
+    fetchMock.mockResolvedValueOnce(ok(info(8_000)));
+    const { result } = renderHook(() => useUsage(), { wrapper });
+    await waitFor(() => expect(result.current.usage?.translate.remaining).toBe(8_000));
+
+    fetchMock.mockRejectedValueOnce(new Error("network"));
+    await act(async () => {
+      await result.current.refresh();
+    });
+    expect(result.current.usage?.translate.remaining).toBe(8_000);
   });
 
   it("取得に失敗しても、例外にならず、値は null のまま", async () => {

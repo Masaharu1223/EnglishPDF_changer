@@ -6,6 +6,25 @@ const anthropic = new Anthropic({
 
 const CLAUDE_MODEL = process.env.ANTHROPIC_MODEL ?? "claude-haiku-4-5-20251001";
 
+// Claude が応答したあとの失敗(解析できない・出力が途中で切れた)。この時点で
+// トークンは消費済みなので、呼び出し側は予約した分を返却してはいけない。
+// (API呼び出し自体の失敗は、普通の Error のまま。そちらは課金されていない)
+export class ClaudeResponseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ClaudeResponseError";
+  }
+}
+
+// 出力トークンの上限を chunk の長さに合わせる。固定(8192)だと、短い chunk に
+// 「長文を書いて」と埋め込まれたとき、1回で大量の出力を課金されてしまう。
+// 通常の訳は chunk の文字数の1〜2倍のトークンで収まるので、日本語など
+// トークンを多く使う入力も考えて、1文字あたり4トークン+余裕分とする。
+const MAX_OUTPUT_TOKENS = 8192;
+export function maxTokensFor(chunk: string): number {
+  return Math.min(MAX_OUTPUT_TOKENS, chunk.length * 4 + 512);
+}
+
 interface SentencePair {
   original: string;
   translation: string;
@@ -76,7 +95,7 @@ export function splitIntoChunks(text: string, maxChars = 1500): string[] {
 export async function processChunk(chunk: string): Promise<SentencePair[]> {
   const response = await anthropic.messages.create({
     model: CLAUDE_MODEL,
-    max_tokens: 8192,
+    max_tokens: maxTokensFor(chunk),
     tools: [translateTool],
     tool_choice: { type: "tool", name: "record_translations" },
     messages: [
@@ -107,16 +126,20 @@ ${chunk}`,
     })
   );
 
+  if (response.stop_reason === "max_tokens") {
+    throw new ClaudeResponseError("Claude output was cut off (max_tokens)");
+  }
+
   const toolUseBlock = response.content.find(
     (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
   );
   if (!toolUseBlock) {
-    throw new Error("No tool_use block in Claude response");
+    throw new ClaudeResponseError("No tool_use block in Claude response");
   }
 
   const parsed = toolUseBlock.input as { sentences: SentencePair[] };
   if (!Array.isArray(parsed.sentences)) {
-    throw new Error("Unexpected JSON structure from Claude");
+    throw new ClaudeResponseError("Unexpected JSON structure from Claude");
   }
   return parsed.sentences;
 }

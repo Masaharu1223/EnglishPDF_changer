@@ -49,7 +49,8 @@ export function UsageProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     const next = await fetchUsage();
-    setUsage(next);
+    // 一時的な取得失敗で、表示を消したり、音声ボタンを無効にしたりしない。前回の値を残す
+    if (next) setUsage(next);
     return next;
   }, []);
 

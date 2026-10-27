@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { cleanText, processChunk, splitIntoChunks } from "@/lib/llm";
+import { ClaudeResponseError, cleanText, processChunk, splitIntoChunks } from "@/lib/llm";
 import { getUsageLimits } from "@/lib/usage-limits";
 import {
   limitMessage,
@@ -33,13 +33,13 @@ export async function POST(request: NextRequest) {
 
     if (action === "translate") {
       const { chunk } = body;
-      if (!chunk || typeof chunk !== "string") {
+      if (!chunk || typeof chunk !== "string" || chunk.trim() === "") {
         return NextResponse.json({ error: "No chunk provided" }, { status: 400 });
       }
 
       // Reject oversized chunks before touching the usage table or Claude, so a
       // single request cannot bypass the per-day character limits.
-      const { maxTranslateChunkChars } = getUsageLimits();
+      const { maxTranslateChunkChars, minChargeChars } = getUsageLimits();
       if (chunk.length > maxTranslateChunkChars) {
         return NextResponse.json(
           { error: `Chunk is too long (max ${maxTranslateChunkChars} characters)` },
@@ -51,7 +51,9 @@ export async function POST(request: NextRequest) {
       // where the money is spent, not in a separate client-side call.
       const session = await auth.api.getSession({ headers: request.headers });
       const subject = subjectFor(session, request.headers);
-      const reserved = await reserveUsage(subject, "translate_chars", chunk.length);
+      // 短い chunk でも Claude の呼び出しには固定のコストがかかるので、最低課金分は予約する。
+      const amount = Math.max(chunk.length, minChargeChars);
+      const reserved = await reserveUsage(subject, "translate_chars", amount);
       if (!reserved.ok) {
         // busy は上限を超えたのではなく、DBが混み合って予約できなかっただけ。
         // リセット時刻は無関係なので返さず、数秒後の再試行を促す。
@@ -84,8 +86,12 @@ export async function POST(request: NextRequest) {
         const sentences = await processChunk(chunk);
         return NextResponse.json({ sentences });
       } catch (error) {
-        // Claude failed, so nothing was spent: give the reserved characters back.
-        await refundUsage(reserved.reservation);
+        // Claude を呼べずに失敗したときだけ、予約した分を返す(何も消費していない)。
+        // 応答を受け取ったあとの失敗は課金済みなので返さない。返すと、出力が途中で
+        // 切れる入力を送り続けて、枠を減らさずに費用だけ発生させられてしまう。
+        if (!(error instanceof ClaudeResponseError)) {
+          await refundUsage(reserved.reservation);
+        }
         throw error;
       }
     }

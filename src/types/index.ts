@@ -32,6 +32,8 @@ export interface UsageInfo {
     remaining: number;
     // 個人の1日の上限
     limit: number;
+    // 1リクエストの最低課金(文字数換算)。短いチャンクでもこの分は減る
+    minCharge: number;
     // 残りを決めているのが、個人の枠か、全体の枠か
     constrainedBy: "personal" | "pool";
     // 次のリセット(ISO 8601, UTC)

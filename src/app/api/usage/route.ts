@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { isFeatureAllowed } from "@/lib/access";
+import { getUsageLimits } from "@/lib/usage-limits";
 import { getRemainingUsage, nextResetAtIso, subjectFor } from "@/lib/usage";
 import type { UsageInfo } from "@/types";
 
@@ -20,7 +21,11 @@ export async function GET(request: NextRequest) {
     const body: UsageInfo = {
       loggedIn: !!session?.user,
       capabilities: { tts: isFeatureAllowed(session?.user) },
-      translate: { ...translate, resetAt: nextResetAtIso() },
+      translate: {
+        ...translate,
+        minCharge: getUsageLimits().minChargeChars,
+        resetAt: nextResetAtIso(),
+      },
     };
     return NextResponse.json(body, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

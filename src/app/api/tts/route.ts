@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth";
 import { isFeatureAllowed } from "@/lib/access";
 import { generateSpeech } from "@/lib/elevenlabs";
 
+const MAX_TTS_CHARS = 5_000;
+
 export async function POST(request: NextRequest) {
   try {
     // 音声合成は ElevenLabs の費用がかかるうえ、利用回数の制限をまだ持たないため、
@@ -27,6 +29,14 @@ export async function POST(request: NextRequest) {
 
     if (!text || typeof text !== "string") {
       return NextResponse.json({ error: "No text provided" }, { status: 400 });
+    }
+
+    // 許可されたアカウントでも、暴走や誤操作で巨大な本文が送られると高額になるので上限を設ける
+    if (text.length > MAX_TTS_CHARS) {
+      return NextResponse.json(
+        { error: `Text is too long (max ${MAX_TTS_CHARS} characters)` },
+        { status: 413 }
+      );
     }
 
     const audioUrl = await generateSpeech(text);

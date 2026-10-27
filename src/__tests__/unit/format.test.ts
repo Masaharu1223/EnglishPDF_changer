@@ -8,6 +8,7 @@ const usage = (over: Partial<UsageInfo["translate"]> = {}, loggedIn = false): Us
   translate: {
     remaining: 300,
     limit: 12_000,
+    minCharge: 500,
     constrainedBy: "personal",
     resetAt: "2026-10-16T00:00:00.000Z",
     ...over,

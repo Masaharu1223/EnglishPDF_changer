@@ -8,7 +8,7 @@ export default function UsageNotice() {
   const { usage } = useUsage();
   if (!usage) return null;
 
-  const { remaining, limit, constrainedBy, resetAt } = usage.translate;
+  const { remaining, limit, minCharge, constrainedBy, resetAt } = usage.translate;
   const exhausted = remaining === 0;
   const notes: string[] = [];
   if (constrainedBy === "pool") {
@@ -35,6 +35,9 @@ export default function UsageNotice() {
       <p className="mt-0.5 text-xs">
         リセット: {formatDateTimeJST(resetAt)}
         {notes.length > 0 && ` ・ ${notes.join(" ・ ")}`}
+      </p>
+      <p className="mt-0.5 text-xs">
+        短いテキストも、1回の翻訳につき最低 {minCharge.toLocaleString("ja-JP")} 文字分として数えます
       </p>
     </div>
   );

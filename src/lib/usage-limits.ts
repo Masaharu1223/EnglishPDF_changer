@@ -22,13 +22,20 @@ export interface UsageLimits {
   // 他のリクエストが持つ行のロックを待つ最大時間(ミリ秒)。詰まったとき、いつまでも
   // 待たせず、数秒で諦めて断る(使い放題にならない側に倒す)
   lockTimeoutMs: number;
+  // 翻訳1リクエストの最低課金(文字数換算)。chunk が短くても、Claude の呼び出しには
+  // プロンプトとツール定義の入力トークンが毎回かかる。文字数だけで数えると、短い
+  // chunk を大量に送られて費用が膨らむので、短くてもこの文字数分は予約する
+  minChargeChars: number;
 }
+
+const INT32_MAX = 2_147_483_647;
 
 function readLimit(name: string, fallback: number): number {
   const raw = process.env[name];
   if (raw === undefined || raw.trim() === "") return fallback;
   const n = Number(raw);
-  return Number.isInteger(n) && n > 0 ? n : fallback;
+  // DB の int(32bit)に入らない値だと、予約のSQLが全リクエストで失敗してしまう
+  return Number.isInteger(n) && n > 0 && n <= INT32_MAX ? n : fallback;
 }
 
 export function getUsageLimits(): UsageLimits {
@@ -40,5 +47,6 @@ export function getUsageLimits(): UsageLimits {
     ownerChars: readLimit("USAGE_LIMIT_OWNER_CHARS", 100_000),
     maxTranslateChunkChars: readLimit("MAX_TRANSLATE_CHUNK_CHARS", 2_000),
     lockTimeoutMs: readLimit("USAGE_LOCK_TIMEOUT_MS", 5_000),
+    minChargeChars: readLimit("USAGE_MIN_CHARGE_CHARS", 500),
   };
 }

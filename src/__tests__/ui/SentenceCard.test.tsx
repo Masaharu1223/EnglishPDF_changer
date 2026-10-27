@@ -13,7 +13,7 @@ import SentenceCard from "@/components/SentenceCard";
 const usage = (loggedIn: boolean, tts: boolean): UsageInfo => ({
   loggedIn,
   capabilities: { tts },
-  translate: { remaining: 100, limit: 100, constrainedBy: "personal", resetAt: "2026-10-16T00:00:00.000Z" },
+  translate: { remaining: 100, limit: 100, minCharge: 500, constrainedBy: "personal", resetAt: "2026-10-16T00:00:00.000Z" },
 });
 
 const sentence = { id: "s0", original: "Hello world.", translation: "こんにちは世界。" };
