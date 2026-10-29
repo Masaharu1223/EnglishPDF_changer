@@ -87,6 +87,20 @@ describe("UsageNotice(今日の残りの表示)", () => {
   });
 });
 
+describe("UsageNotice: 残りが最低課金に満たないとき", () => {
+  it("残りが最低課金(500)未満なら、実際には1回も翻訳できないので、警告色にする", () => {
+    mocks.usage = usage({ remaining: 499 });
+    const { container } = render(<UsageNotice />);
+    expect((container.firstChild as HTMLElement).className).toContain("amber");
+  });
+
+  it("残りが最低課金ちょうどなら、まだ1回は翻訳できるので、通常の色(境界)", () => {
+    mocks.usage = usage({ remaining: 500 });
+    const { container } = render(<UsageNotice />);
+    expect((container.firstChild as HTMLElement).className).not.toContain("amber");
+  });
+});
+
 describe("UsageNotice: 最低課金の注記", () => {
   it("短いテキストでも最低課金があることを伝える(残りが思ったより減る理由が分かる)", () => {
     mocks.usage = usage({ remaining: 5_000 });

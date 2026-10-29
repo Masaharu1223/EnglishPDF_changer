@@ -275,7 +275,9 @@ describe("ホーム画面: 429以外のチャンクの失敗(一部が抜けた�
     render(<Home />);
     submit();
 
-    expect(await screen.findByText(/翻訳できませんでした/)).toBeTruthy();
+    const msg = await screen.findByText(/翻訳できませんでした/);
+    expect(msg.textContent).toContain("3個のチャンクを翻訳できませんでした");
+    expect(msg.textContent).toContain("残り2個は処理していません"); // 失敗した数だけでなく、未処理の数も伝える
     expect(callsTo("/api/process", "translate")).toHaveLength(3);
     expect(callsTo("/api/documents")).toHaveLength(0);
   });

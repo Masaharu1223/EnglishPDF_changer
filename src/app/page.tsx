@@ -126,6 +126,7 @@ export default function Home() {
     let failedChunks = 0;
     let consecutiveFailures = 0;
     let aborted = false;
+    let notProcessed = 0;
     for (let i = 0; i < chunks.length; i++) {
       setState({
         status: "processing",
@@ -169,6 +170,7 @@ export default function Home() {
         consecutiveFailures += 1;
         if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
           aborted = true;
+          notProcessed = chunks.length - (i + 1);
           break;
         }
       }
@@ -196,7 +198,9 @@ export default function Home() {
         status: "error",
         error:
           `${failedChunks}個のチャンクを翻訳できませんでした。` +
-          (aborted ? "続けて失敗したため、翻訳を中断しました。" : "") +
+          (aborted
+            ? `続けて失敗したため、翻訳を中断しました(残り${notProcessed}個は処理していません)。`
+            : "") +
           (collected.length > 0
             ? "翻訳できた分は表示していますが、一部が抜けているため履歴には保存されません。"
             : "") +

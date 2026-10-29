@@ -72,10 +72,28 @@ export function cleanText(text: string): string {
     .trim();
 }
 
+// 句読点のない長い文章(PDFから抽出した箇条書きなど)は、1つの「文」が maxChars を超える。
+// そのままだと、サーバーが受け付ける最大文字数を超えて翻訳が失敗するので、空白の位置で
+// (空白もなければ maxChars で強制的に)分ける。
+function splitLongPart(part: string, maxChars: number): string[] {
+  const pieces: string[] = [];
+  let rest = part;
+  while (rest.length > maxChars) {
+    const space = rest.lastIndexOf(" ", maxChars);
+    const cut = space > 0 ? space : maxChars;
+    pieces.push(rest.slice(0, cut));
+    rest = rest.slice(cut).trimStart();
+  }
+  if (rest) pieces.push(rest);
+  return pieces;
+}
+
 // Split text into chunks of roughly maxChars, breaking at sentence-like boundaries
 export function splitIntoChunks(text: string, maxChars = 1500): string[] {
   // Split on sentence-ending punctuation or newlines
-  const parts = text.split(/(?<=[.!?])\s+/);
+  const parts = text
+    .split(/(?<=[.!?])\s+/)
+    .flatMap((part) => (part.length > maxChars ? splitLongPart(part, maxChars) : [part]));
   const chunks: string[] = [];
   let current = "";
 
@@ -93,15 +111,17 @@ export function splitIntoChunks(text: string, maxChars = 1500): string[] {
 }
 
 export async function processChunk(chunk: string): Promise<SentencePair[]> {
-  const response = await anthropic.messages.create({
-    model: CLAUDE_MODEL,
-    max_tokens: maxTokensFor(chunk),
-    tools: [translateTool],
-    tool_choice: { type: "tool", name: "record_translations" },
-    messages: [
-      {
-        role: "user",
-        content: `You are given English text. Extract unique English sentences and translate each to Japanese.
+  let response: Anthropic.Message;
+  try {
+    response = await anthropic.messages.create({
+      model: CLAUDE_MODEL,
+      max_tokens: maxTokensFor(chunk),
+      tools: [translateTool],
+      tool_choice: { type: "tool", name: "record_translations" },
+      messages: [
+        {
+          role: "user",
+          content: `You are given English text. Extract unique English sentences and translate each to Japanese.
 
 Rules:
 - Remove duplicate phrases
@@ -110,10 +130,31 @@ Rules:
 
 Text:
 ${chunk}`,
-      },
-    ],
-  });
+        },
+      ],
+    });
+  } catch (error) {
+    // 接続の失敗やタイムアウトは、応答が返らなかっただけで、サーバー側では生成と課金が
+    // 進んでいるかもしれない。未課金と言い切れないので、返却させない(安全側)。
+    // Claude が拒否した失敗(4xx/5xx・レート制限・過負荷)は未課金なので、そのまま投げて返却させる。
+    if (error instanceof Anthropic.APIConnectionError) {
+      throw new ClaudeResponseError(`Claude connection failed: ${error.message}`);
+    }
+    throw error;
+  }
 
+  // ここから先は、応答を受け取ったあと(課金済み)。どんな失敗も返却させない。
+  try {
+    return parseResponse(response, chunk);
+  } catch (error) {
+    if (error instanceof ClaudeResponseError) throw error;
+    throw new ClaudeResponseError(
+      `Unexpected error after Claude responded: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+function parseResponse(response: Anthropic.Message, chunk: string): SentencePair[] {
   // 費用の見積もり(1,000文字あたりのトークン数と単価)を実測で見直すためのログ。
   // 本文は出さず、文字数とトークン数だけを残す。
   console.info(

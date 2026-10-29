@@ -9,7 +9,8 @@ export default function UsageNotice() {
   if (!usage) return null;
 
   const { remaining, limit, minCharge, constrainedBy, resetAt } = usage.translate;
-  const exhausted = remaining === 0;
+  // 残りが最低課金に満たないと、実際には1回も翻訳できない(0でなくても使い切りの扱い)
+  const exhausted = remaining < minCharge;
   const notes: string[] = [];
   if (constrainedBy === "pool") {
     notes.push(
