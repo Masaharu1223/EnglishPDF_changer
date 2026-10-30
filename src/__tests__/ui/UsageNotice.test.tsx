@@ -1,0 +1,110 @@
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render } from "@testing-library/react";
+import type { UsageInfo } from "@/types";
+
+const mocks = vi.hoisted(() => ({ usage: null as UsageInfo | null }));
+vi.mock("@/components/UsageProvider", () => ({
+  useUsage: () => ({ usage: mocks.usage, refresh: vi.fn() }),
+}));
+
+import UsageNotice from "@/components/UsageNotice";
+
+const usage = (
+  translate: Partial<UsageInfo["translate"]> = {},
+  loggedIn = false
+): UsageInfo => ({
+  loggedIn,
+  capabilities: { tts: false },
+  translate: {
+    remaining: 8_000,
+    limit: 12_000,
+    minCharge: 500,
+    constrainedBy: "personal",
+    resetAt: "2026-10-16T00:00:00.000Z",
+    ...translate,
+  },
+});
+
+afterEach(() => {
+  cleanup();
+  mocks.usage = null;
+});
+
+describe("UsageNotice(今日の残りの表示)", () => {
+  it("取得できていないときは、何も表示しない", () => {
+    mocks.usage = null;
+    const { container } = render(<UsageNotice />);
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("残り・上限を桁区切りで、リセット時刻をタイムゾーンつきで表示する", () => {
+    mocks.usage = usage();
+    const { container } = render(<UsageNotice />);
+    expect(container.textContent).toContain("本日の翻訳の残り");
+    expect(container.textContent).toContain("8,000");
+    expect(container.textContent).toContain("12,000");
+    expect(container.textContent).toContain("リセット: 2026/10/16 09:00 (JST)");
+  });
+
+  it("未ログインには、ログインの案内を出す", () => {
+    mocks.usage = usage({}, false);
+    const { container } = render(<UsageNotice />);
+    expect(container.textContent).toContain("ログインすると、より多く使えます");
+  });
+
+  it("ログイン済みには、ログインの案内を出さない", () => {
+    mocks.usage = usage({}, true);
+    const { container } = render(<UsageNotice />);
+    expect(container.textContent).not.toContain("ログインすると");
+  });
+
+  it("残りがあるうちは、通常の色(警告色にしない)", () => {
+    mocks.usage = usage();
+    const { container } = render(<UsageNotice />);
+    expect((container.firstChild as HTMLElement).className).not.toContain("amber");
+  });
+
+  it("全体の上限が制約で、残りがあるとき: 残りが少なくなっている旨を出す", () => {
+    mocks.usage = usage({ constrainedBy: "pool", remaining: 500 });
+    const { container } = render(<UsageNotice />);
+    expect(container.textContent).toContain("全体の利用上限が近いため");
+  });
+
+  it("全体の上限に達したとき: 警告色にして、その旨を出す", () => {
+    mocks.usage = usage({ constrainedBy: "pool", remaining: 0 });
+    const { container } = render(<UsageNotice />);
+    expect(container.textContent).toContain("全体の利用上限に達しています");
+    expect((container.firstChild as HTMLElement).className).toContain("amber");
+  });
+
+  it("個人の上限に達したとき: 警告色にして、残り0を表示する(全体の上限の文言は出さない)", () => {
+    mocks.usage = usage({ constrainedBy: "personal", remaining: 0 });
+    const { container } = render(<UsageNotice />);
+    expect((container.firstChild as HTMLElement).className).toContain("amber");
+    expect(container.textContent).toContain("0");
+    expect(container.textContent).not.toContain("全体の利用上限");
+  });
+});
+
+describe("UsageNotice: 残りが最低課金に満たないとき", () => {
+  it("残りが最低課金(500)未満なら、実際には1回も翻訳できないので、警告色にする", () => {
+    mocks.usage = usage({ remaining: 499 });
+    const { container } = render(<UsageNotice />);
+    expect((container.firstChild as HTMLElement).className).toContain("amber");
+  });
+
+  it("残りが最低課金ちょうどなら、まだ1回は翻訳できるので、通常の色(境界)", () => {
+    mocks.usage = usage({ remaining: 500 });
+    const { container } = render(<UsageNotice />);
+    expect((container.firstChild as HTMLElement).className).not.toContain("amber");
+  });
+});
+
+describe("UsageNotice: 最低課金の注記", () => {
+  it("短いテキストでも最低課金があることを伝える(残りが思ったより減る理由が分かる)", () => {
+    mocks.usage = usage({ remaining: 5_000 });
+    const { container } = render(<UsageNotice />);
+    expect(container.textContent).toContain("最低 500 文字分として数えます");
+  });
+});

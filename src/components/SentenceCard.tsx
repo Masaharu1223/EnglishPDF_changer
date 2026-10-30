@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import type { Sentence } from "@/types";
 import ClickableEnglishText from "./ClickableEnglishText";
+import { useUsage } from "./UsageProvider";
 
 interface SentenceCardProps {
   sentence: Sentence;
@@ -14,6 +15,17 @@ export default function SentenceCard({ sentence, index }: SentenceCardProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  // 音声の生成は試験導入で、許可されたアカウントだけが使える(判定はサーバー側でも行う)。
+  // 取得済みの音声(audioUrl)がある場合は、APIを呼ばないので再生できる。
+  const { usage } = useUsage();
+  const canPlay = usage?.capabilities.tts === true || !!audioUrl;
+  const disabledReason =
+    usage === null
+      ? "確認中..."
+      : usage.loggedIn
+        ? "音声の再生は、現在限定公開中です"
+        : "音声の再生は、現在限定公開中です(ログインが必要です)";
 
   const handlePlay = async () => {
     if (isPlaying && audioRef.current) {
@@ -66,12 +78,12 @@ export default function SentenceCard({ sentence, index }: SentenceCardProps) {
         </div>
         <button
           onClick={handlePlay}
-          disabled={isLoading}
+          disabled={isLoading || !canPlay}
           className={`
             flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors
-            ${isLoading ? "bg-gray-100 text-gray-400" : isPlaying ? "bg-red-100 text-red-600 hover:bg-red-200" : "bg-blue-100 text-blue-600 hover:bg-blue-200"}
+            ${!canPlay ? "bg-gray-100 text-gray-300 cursor-not-allowed" : isLoading ? "bg-gray-100 text-gray-400" : isPlaying ? "bg-red-100 text-red-600 hover:bg-red-200" : "bg-blue-100 text-blue-600 hover:bg-blue-200"}
           `}
-          title={isPlaying ? "Stop" : "Play"}
+          title={!canPlay ? disabledReason : isPlaying ? "Stop" : "Play"}
         >
           {isLoading ? (
             <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">

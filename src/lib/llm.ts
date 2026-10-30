@@ -6,6 +6,26 @@ const anthropic = new Anthropic({
 
 const CLAUDE_MODEL = process.env.ANTHROPIC_MODEL ?? "claude-haiku-4-5-20251001";
 
+// Claude が応答したあとの失敗(解析できない・出力が途中で切れた)。この時点で
+// トークンは消費済みなので、呼び出し側は予約した分を返却してはいけない。
+// (API呼び出し自体の失敗は、普通の Error のまま。そちらは課金されていない)
+export class ClaudeResponseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ClaudeResponseError";
+  }
+}
+
+// 出力トークンの上限を chunk の長さに合わせる。固定(8192)だと、短い chunk に
+// 「長文を書いて」と埋め込まれたとき、1回で大量の出力を課金されてしまう。
+// 出力にはツール呼び出しのJSON(原文+訳)が入り、実測では chunk の文字数の約1.2倍の
+// トークンになる。その約1.7倍(2.0倍+256)を上限とし、通常は切れず、暴走したときの
+// 出力課金(入力の5倍の単価)が予約の見積もりを大きく超えないようにする。
+const MAX_OUTPUT_TOKENS = 8192;
+export function maxTokensFor(chunk: string): number {
+  return Math.min(MAX_OUTPUT_TOKENS, Math.ceil(chunk.length * 2.0) + 256);
+}
+
 interface SentencePair {
   original: string;
   translation: string;
@@ -53,10 +73,28 @@ export function cleanText(text: string): string {
     .trim();
 }
 
+// 句読点のない長い文章(PDFから抽出した箇条書きなど)は、1つの「文」が maxChars を超える。
+// そのままだと、サーバーが受け付ける最大文字数を超えて翻訳が失敗するので、空白の位置で
+// (空白もなければ maxChars で強制的に)分ける。
+function splitLongPart(part: string, maxChars: number): string[] {
+  const pieces: string[] = [];
+  let rest = part;
+  while (rest.length > maxChars) {
+    const space = rest.lastIndexOf(" ", maxChars);
+    const cut = space > 0 ? space : maxChars;
+    pieces.push(rest.slice(0, cut));
+    rest = rest.slice(cut).trimStart();
+  }
+  if (rest) pieces.push(rest);
+  return pieces;
+}
+
 // Split text into chunks of roughly maxChars, breaking at sentence-like boundaries
 export function splitIntoChunks(text: string, maxChars = 1500): string[] {
   // Split on sentence-ending punctuation or newlines
-  const parts = text.split(/(?<=[.!?])\s+/);
+  const parts = text
+    .split(/(?<=[.!?])\s+/)
+    .flatMap((part) => (part.length > maxChars ? splitLongPart(part, maxChars) : [part]));
   const chunks: string[] = [];
   let current = "";
 
@@ -74,15 +112,17 @@ export function splitIntoChunks(text: string, maxChars = 1500): string[] {
 }
 
 export async function processChunk(chunk: string): Promise<SentencePair[]> {
-  const response = await anthropic.messages.create({
-    model: CLAUDE_MODEL,
-    max_tokens: 8192,
-    tools: [translateTool],
-    tool_choice: { type: "tool", name: "record_translations" },
-    messages: [
-      {
-        role: "user",
-        content: `You are given English text. Extract unique English sentences and translate each to Japanese.
+  let response: Anthropic.Message;
+  try {
+    response = await anthropic.messages.create({
+      model: CLAUDE_MODEL,
+      max_tokens: maxTokensFor(chunk),
+      tools: [translateTool],
+      tool_choice: { type: "tool", name: "record_translations" },
+      messages: [
+        {
+          role: "user",
+          content: `You are given English text. Extract unique English sentences and translate each to Japanese.
 
 Rules:
 - Remove duplicate phrases
@@ -91,49 +131,58 @@ Rules:
 
 Text:
 ${chunk}`,
-      },
-    ],
-  });
+        },
+      ],
+    });
+  } catch (error) {
+    // 接続の失敗やタイムアウトは、応答が返らなかっただけで、サーバー側では生成と課金が
+    // 進んでいるかもしれない。未課金と言い切れないので、返却させない(安全側)。
+    // Claude が拒否した失敗(4xx/5xx・レート制限・過負荷)は未課金なので、そのまま投げて返却させる。
+    if (error instanceof Anthropic.APIConnectionError) {
+      throw new ClaudeResponseError(`Claude connection failed: ${error.message}`);
+    }
+    throw error;
+  }
+
+  // ここから先は、応答を受け取ったあと(課金済み)。どんな失敗も返却させない。
+  try {
+    return parseResponse(response, chunk);
+  } catch (error) {
+    if (error instanceof ClaudeResponseError) throw error;
+    throw new ClaudeResponseError(
+      `Unexpected error after Claude responded: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+function parseResponse(response: Anthropic.Message, chunk: string): SentencePair[] {
+  // 費用の見積もり(1,000文字あたりのトークン数と単価)を実測で見直すためのログ。
+  // 本文は出さず、文字数とトークン数だけを残す。
+  console.info(
+    "claude_usage",
+    JSON.stringify({
+      model: CLAUDE_MODEL,
+      chunk_chars: chunk.length,
+      input_tokens: response.usage.input_tokens,
+      output_tokens: response.usage.output_tokens,
+      stop_reason: response.stop_reason,
+    })
+  );
+
+  if (response.stop_reason === "max_tokens") {
+    throw new ClaudeResponseError("Claude output was cut off (max_tokens)");
+  }
 
   const toolUseBlock = response.content.find(
     (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
   );
   if (!toolUseBlock) {
-    throw new Error("No tool_use block in Claude response");
+    throw new ClaudeResponseError("No tool_use block in Claude response");
   }
 
   const parsed = toolUseBlock.input as { sentences: SentencePair[] };
   if (!Array.isArray(parsed.sentences)) {
-    throw new Error("Unexpected JSON structure from Claude");
+    throw new ClaudeResponseError("Unexpected JSON structure from Claude");
   }
   return parsed.sentences;
-}
-
-export async function splitAndTranslate(text: string): Promise<SentencePair[]> {
-  const cleaned = cleanText(text);
-  const chunks = splitIntoChunks(cleaned);
-  const results: SentencePair[] = [];
-
-  for (const chunk of chunks) {
-    try {
-      const pairs = await processChunk(chunk);
-      results.push(...pairs);
-    } catch (error) {
-      console.error("Chunk processing failed, skipping:", error);
-      // Continue with other chunks instead of failing entirely
-    }
-  }
-
-  if (results.length === 0) {
-    throw new Error("Failed to process any text chunks");
-  }
-
-  // Deduplicate by original text
-  const seen = new Set<string>();
-  return results.filter((pair) => {
-    const key = pair.original.toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
