@@ -49,8 +49,13 @@ describe("maxTokensFor(出力の上限を chunk の長さに合わせる)", () =
     expect(maxTokensFor("a".repeat(100_000))).toBe(8_192);
   });
 
-  it("日本語のようにトークンを多く使う入力でも、訳が途中で切れない余裕がある(1文字あたり4トークン以上)", () => {
-    expect(maxTokensFor("あ".repeat(1_000))).toBeGreaterThanOrEqual(4_000);
+  it("実測(出力は約1.2トークン/文字)に対して約1.7倍の余裕があり、予約の見積もりを大きく超えない", () => {
+    const MEASURED_TOKENS_PER_CHAR = 1.2;
+    for (const n of [200, 680, 1_500, 2_000]) {
+      const max = maxTokensFor("a".repeat(n));
+      expect(max).toBeGreaterThanOrEqual(n * MEASURED_TOKENS_PER_CHAR * 1.5);
+      expect(max).toBeLessThanOrEqual(n * MEASURED_TOKENS_PER_CHAR * 2.5 + 300);
+    }
   });
 });
 

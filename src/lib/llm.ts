@@ -18,11 +18,12 @@ export class ClaudeResponseError extends Error {
 
 // 出力トークンの上限を chunk の長さに合わせる。固定(8192)だと、短い chunk に
 // 「長文を書いて」と埋め込まれたとき、1回で大量の出力を課金されてしまう。
-// 通常の訳は chunk の文字数の1〜2倍のトークンで収まるので、日本語など
-// トークンを多く使う入力も考えて、1文字あたり4トークン+余裕分とする。
+// 出力にはツール呼び出しのJSON(原文+訳)が入り、実測では chunk の文字数の約1.2倍の
+// トークンになる。その約1.7倍(2.0倍+256)を上限とし、通常は切れず、暴走したときの
+// 出力課金(入力の5倍の単価)が予約の見積もりを大きく超えないようにする。
 const MAX_OUTPUT_TOKENS = 8192;
 export function maxTokensFor(chunk: string): number {
-  return Math.min(MAX_OUTPUT_TOKENS, chunk.length * 4 + 512);
+  return Math.min(MAX_OUTPUT_TOKENS, Math.ceil(chunk.length * 2.0) + 256);
 }
 
 interface SentencePair {
@@ -164,6 +165,7 @@ function parseResponse(response: Anthropic.Message, chunk: string): SentencePair
       chunk_chars: chunk.length,
       input_tokens: response.usage.input_tokens,
       output_tokens: response.usage.output_tokens,
+      stop_reason: response.stop_reason,
     })
   );
 

@@ -3,7 +3,8 @@
 // NEXT_PUBLIC_ は付けない。変更は Vercel で保存したあと Redeploy しないと反映されない。
 //
 // 既定値は「自分以外のユーザー全員の利用総額を月5,000円に収める」前提で決めている
-// (1,000文字あたり約1.1円=概算の高いほうで計算し、31日分で 14万文字/日)。
+// (1,000文字あたり約1.1円で計算すると31日分で約14万文字/日だが、出力が想定より
+// 長くなる最悪ケース(実費が最大約1.55円/1,000文字)でも収まるよう、10万文字/日にしている)。
 // 実際の単価は、翻訳APIのレスポンスの usage を見て見直す。
 
 export interface UsageLimits {
@@ -43,7 +44,7 @@ export function getUsageLimits(): UsageLimits {
     anonIpChars: readLimit("USAGE_LIMIT_ANON_IP_CHARS", 12_000),
     anonTotalChars: readLimit("USAGE_LIMIT_ANON_TOTAL_CHARS", 48_000),
     userChars: readLimit("USAGE_LIMIT_USER_CHARS", 30_000),
-    othersTotalChars: readLimit("USAGE_LIMIT_OTHERS_TOTAL_CHARS", 140_000),
+    othersTotalChars: readLimit("USAGE_LIMIT_OTHERS_TOTAL_CHARS", 100_000),
     ownerChars: readLimit("USAGE_LIMIT_OWNER_CHARS", 100_000),
     maxTranslateChunkChars: readLimit("MAX_TRANSLATE_CHUNK_CHARS", 2_000),
     lockTimeoutMs: readLimit("USAGE_LOCK_TIMEOUT_MS", 5_000),

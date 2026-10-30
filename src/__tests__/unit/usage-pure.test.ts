@@ -49,7 +49,7 @@ describe("bucketsFor(どの枠をまとめて確認するか)", () => {
   it("user: 個人の枠 + 自分以外の全員の合計", () => {
     expect(bucketsFor({ type: "user", userId: "u1" }, limits())).toEqual([
       { key: "u:u1", limit: 30_000 },
-      { key: "others:*", limit: 140_000 },
+      { key: "others:*", limit: 100_000 },
     ]);
   });
 
@@ -60,7 +60,7 @@ describe("bucketsFor(どの枠をまとめて確認するか)", () => {
     expect(buckets[0].limit).toBe(12_000);
     expect(buckets.slice(1)).toEqual([
       { key: "anon:*", limit: 48_000 },
-      { key: "others:*", limit: 140_000 },
+      { key: "others:*", limit: 100_000 },
     ]);
   });
 

@@ -4,12 +4,12 @@ import { getUsageLimits } from "@/lib/usage-limits";
 afterEach(() => vi.unstubAllEnvs());
 
 describe("getUsageLimits", () => {
-  it("環境変数がなければ既定値を使う(自分以外の全員の合計は月5,000円に収まる14万文字/日)", () => {
+  it("環境変数がなければ既定値を使う(自分以外の全員の合計は月5,000円に収まる10万文字/日)", () => {
     expect(getUsageLimits()).toEqual({
       anonIpChars: 12_000,
       anonTotalChars: 48_000,
       userChars: 30_000,
-      othersTotalChars: 140_000,
+      othersTotalChars: 100_000,
       ownerChars: 100_000,
       maxTranslateChunkChars: 2_000,
       lockTimeoutMs: 5_000,
