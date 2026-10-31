@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type RefObject } from "react";
+import { PDF_MARGIN_PT, computePdfLayout } from "@/lib/pdf-layout";
 
 interface DownloadPdfButtonProps {
   targetRef: RefObject<HTMLElement>;
@@ -34,27 +35,40 @@ export default function DownloadPdfButton({
         scale: 2,
         backgroundColor: "#ffffff",
       });
-      const imgData = canvas.toDataURL("image/png");
-
       const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pageWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const { contentWidthPt, slices } = computePdfLayout(
+        canvas.width,
+        canvas.height,
+        pdf.internal.pageSize.getWidth(),
+        pdf.internal.pageSize.getHeight()
+      );
 
-      // Slice the tall rasterized image across as many A4 pages as needed,
-      // shifting the image up by one page height each time.
-      let heightLeft = imgHeight;
-      let position = 0;
-      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
+      // Cut the tall rasterized image into page-sized slices and place each one
+      // inside the margins (see computePdfLayout for why not shift-and-repeat).
+      slices.forEach((slice, index) => {
+        const pageCanvas = document.createElement("canvas");
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = slice.sourceHeight;
+        const ctx = pageCanvas.getContext("2d");
+        if (!ctx) throw new Error("Canvas 2D context is not available");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+        ctx.drawImage(
+          canvas,
+          0, slice.sourceY, canvas.width, slice.sourceHeight,
+          0, 0, canvas.width, slice.sourceHeight
+        );
 
-      while (heightLeft > 0) {
-        position -= pageHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-      }
+        if (index > 0) pdf.addPage();
+        pdf.addImage(
+          pageCanvas.toDataURL("image/png"),
+          "PNG",
+          PDF_MARGIN_PT,
+          PDF_MARGIN_PT,
+          contentWidthPt,
+          slice.heightPt
+        );
+      });
 
       pdf.save(fileName);
     } catch (error) {
