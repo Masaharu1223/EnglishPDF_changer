@@ -43,6 +43,9 @@ export default function Home() {
         resultView: ResultView;
       }>;
       if (parsed.version === 1 && Array.isArray(parsed.sentences)) {
+        // 初回描画をサーバーと一致させる(hydration の不一致を避ける)ため、
+        // マウント後のeffectで保存済みの結果を復元する。意図した使い方
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setSentences(parsed.sentences);
         if (parsed.resultView === "cards" || parsed.resultView === "shadowing") {
           setResultView(parsed.resultView);
