@@ -10,9 +10,10 @@ import SentenceResultView from "@/components/SentenceResultView";
 export default async function HistoryDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const documentId = Number(params.id);
+  const { id } = await params;
+  const documentId = Number(id);
   if (!Number.isInteger(documentId)) notFound();
 
   const session = await auth.api.getSession({ headers: await headers() });

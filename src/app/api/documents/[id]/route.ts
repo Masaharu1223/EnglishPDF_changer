@@ -5,14 +5,15 @@ import { deleteDocument } from "@/lib/documents";
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const documentId = Number(params.id);
+  const { id } = await params;
+  const documentId = Number(id);
   if (!Number.isInteger(documentId)) {
     return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   }

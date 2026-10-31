@@ -4,7 +4,7 @@ import { useState, type RefObject } from "react";
 import { PDF_MARGIN_PT, computePdfLayout } from "@/lib/pdf-layout";
 
 interface DownloadPdfButtonProps {
-  targetRef: RefObject<HTMLElement>;
+  targetRef: RefObject<HTMLElement | null>;
   fileName: string;
   label?: string;
 }
