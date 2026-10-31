@@ -129,3 +129,23 @@
 ## 注意
 - worktree 内の `.env.local` に新しいシークレットを足した場合は、マージ後・worktree 削除前に main 側へ同期する
 - `main` へ直接 push しない。このブランチ上のPRでマージする
+
+---
+
+# 依存パッケージの脆弱性対応(Issue #39)
+
+## 方針
+- `npm audit fix --force` は使わない。メジャー更新が必要なものは別PRに分ける
+- PR A(`fix/audit-safe-updates`): `--force` なしで更新できる間接依存だけ更新する(本PR)
+- PR B: `next` を 15.5 系の最新へ(App Router・認証・PDF出力の実機確認が必要)
+- PR C: `vitest@5` と `@types/node`
+
+## 調査結果(影響の有無)
+- `dompurify`: `jspdf` 経由。PDF出力は `html2canvas` で画像化して `jsPDF` に渡しており、DOMPurify を使う `.html()` は呼んでいない → 悪用経路なし
+- `next`: `next/image`・Server Actions・ミドルウェア・rewrites は未使用、`next.config.mjs` は空 → 大半は非該当。App Router の RSC に関するDoS・キャッシュ汚染は該当しうる(Vercel側の緩和は未確認)
+
+## PR A の結果
+- [x] `npm audit fix`(`--force` なし)。`package.json` は変更なし、`package-lock.json` のみ
+- [x] 脆弱性 18件 → 9件(moderate 2 / high 4 / critical 3)。残りは `next` 系(PR B)と `vitest` 系(PR C)
+- [x] tsc・lint・テスト209件(unit/API/UI 182 + DB統合 27)・`next build` が成功
+- [ ] Vercel のプレビューで、PDF出力(jspdf/dompurify の更新を含む)・翻訳・ログインを確認
