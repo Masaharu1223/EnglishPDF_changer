@@ -160,11 +160,11 @@
 - 機能確認は、ローカルの `next build && next start` で行う(Previewは環境変数が不足しているため、ビルド確認だけに使う)
 
 ## 手順
-- [ ] 1. React 19 + `@types/react` 19 に更新し、型エラーを直す
-- [ ] 2. Next 15.5.28 に更新(`params` を `await` に)
-- [ ] 3. ESLint 9 + `eslint-config-next` 16、flat config(`eslint.config.mjs`)に移行、`lint` スクリプトを変更
-- [ ] 4. Next 16.4.3 に更新(Turbopack の影響、`pdf-parse` / `tesseract.js` を確認)
-- [ ] 5. テスト(unit/API/UI/DB統合)、`next build`
+- [x] 1. React 19 + `@types/react` 19 に更新し、型エラーを直す
+- [x] 2. Next 15.5.28 に更新(`params` を `await` に)
+- [x] 3. ESLint 9 + `eslint-config-next` 16、flat config(`eslint.config.mjs`)に移行、`lint` スクリプトを変更
+- [x] 4. Next 16.4.3 に更新(Turbopack の影響、`pdf-parse` / `tesseract.js` を確認)
+- [x] 5. テスト(unit/API/UI/DB統合)、`next build`
 - [ ] 6. ローカル実機確認: 未ログイン翻訳、Googleログイン、履歴(一覧・詳細・削除)、PDFダウンロード、再生ボタン(運営者)
-- [ ] 7. `code-reviewer` によるレビュー
+- [x] 7. `code-reviewer` によるレビュー
 - [ ] 8. PR → マージ → 本番確認(問題があれば Instant Rollback)
