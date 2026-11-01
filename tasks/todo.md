@@ -149,3 +149,22 @@
 - [x] 脆弱性 18件 → 9件(moderate 2 / high 4 / critical 3)。残りは `next` 系(PR B)と `vitest` 系(PR C)
 - [x] tsc・lint・テスト209件(unit/API/UI 182 + DB統合 27)・`next build` が成功
 - [ ] Vercel のプレビューで、PDF出力(jspdf/dompurify の更新を含む)・翻訳・ログインを確認
+
+---
+
+# Next.js 16 への更新(Issue #39 PR B)
+
+## 方針
+- 14.2.35 では、25件超の脆弱性の修正が入らないため、Next 16.4.3 まで上げる(React 19、ESLint 9 も同時)
+- コミットを段階に分け、壊れたときに原因を切り分けられるようにする。各段階で `tsc`・lint・テスト・`next build` を通す
+- 機能確認は、ローカルの `next build && next start` で行う(Previewは環境変数が不足しているため、ビルド確認だけに使う)
+
+## 手順
+- [x] 1. React 19 + `@types/react` 19 に更新し、型エラーを直す
+- [x] 2. Next 15.5.28 に更新(`params` を `await` に)
+- [x] 3. ESLint 9 + `eslint-config-next` 16、flat config(`eslint.config.mjs`)に移行、`lint` スクリプトを変更
+- [x] 4. Next 16.4.3 に更新(Turbopack の影響、`pdf-parse` / `tesseract.js` を確認)
+- [x] 5. テスト(unit/API/UI/DB統合)、`next build`
+- [ ] 6. ローカル実機確認: 未ログイン翻訳、Googleログイン、履歴(一覧・詳細・削除)、PDFダウンロード、再生ボタン(運営者)
+- [x] 7. `code-reviewer` によるレビュー
+- [ ] 8. PR → マージ → 本番確認(問題があれば Instant Rollback)

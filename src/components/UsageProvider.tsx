@@ -38,6 +38,8 @@ export function UsageProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (isPending) return;
     let cancelled = false;
+    // ログイン状態が変わったとき、取得し直すまで古い値を見せないための意図したリセット
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setUsage(null);
     void fetchUsage().then((next) => {
       if (!cancelled) setUsage(next);

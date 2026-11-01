@@ -20,7 +20,7 @@ Google ログインすると、処理結果(抽出した文とその翻訳)が N
 
 | 種別 | 技術 |
 |---|---|
-| フレームワーク | Next.js 14 (App Router), React 18, TypeScript |
+| フレームワーク | Next.js 16 (App Router), React 19, TypeScript |
 | スタイリング | Tailwind CSS |
 | 翻訳 | Claude API(`@anthropic-ai/sdk`、Tool Use。既定モデル `claude-haiku-4-5-20251001`） |
 | 認証 | Better Auth(Google OAuthのみ） |
@@ -67,7 +67,7 @@ Google ログインすると、処理結果(抽出した文とその翻訳)が N
 | `npm run dev` | 開発サーバー起動（http://localhost:3000） |
 | `npm run build` | 本番ビルド |
 | `npm run start` | 本番サーバー起動 |
-| `npm run lint` | ESLint 実行 |
+| `npm run lint` | ESLint 9(flat config)実行 |
 | `node --env-file=.env.local scripts/migrate.mjs` | DBマイグレーション実行(初回セットアップ時のみ。後述) |
 
 ## ディレクトリ構成
@@ -98,7 +98,7 @@ Google ログインすると、処理結果(抽出した文とその翻訳)が N
 
 ### 前提条件
 
-- Node.js v20 以上(`package-lock.json` を使用。npm 想定。`scripts/migrate.mjs` が Node 標準の `--env-file` を使うため v20.6 以降が必要)
+- Node.js v20.9 以上(Next.js 16 の要件。`package-lock.json` を使用。npm 想定。`scripts/migrate.mjs` が Node 標準の `--env-file` を使う)
 - Neonプロジェクト(DB用)
 - Google CloudのOAuthクライアント(Googleログイン用)
 - Anthropic・ElevenLabsのAPIキー
