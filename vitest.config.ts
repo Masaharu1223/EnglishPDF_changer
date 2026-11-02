@@ -3,7 +3,8 @@ import path from "node:path";
 
 export default defineConfig({
   // JSX は vite 8 の既定(oxc、automatic runtime)で変換されるので、個別の設定は要らない
-  // (tsconfig の "jsx" には依存しない。vite 7 までは esbuild: { jsx: "automatic" } が必要だった)
+  // (tsconfig の "jsx" には依存しない。vite 7 までは esbuild: { jsx: "automatic" } が必要だった。
+  //  確認: oxc の jsx.runtime を "classic" にすると UI のテストが 42 件失敗する)
   resolve: { alias: { "@": path.resolve(__dirname, "src") } },
   test: {
     include: ["src/__tests__/**/*.test.{ts,tsx}"],

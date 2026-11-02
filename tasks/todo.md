@@ -174,7 +174,7 @@
 ## 方針
 - 残りの critical 2件(`vitest` / `tinypool`、開発用)を解消する。本番のビルドには影響しない
 - vitest 5 は Node 22.12 以上が必要。`@types/node` は `^22` 以上、`@vitest/coverage-v8` は vitest と同じ版にそろえる
-- `vite` は 7 のまま(8 では `vitest.config.ts` の `esbuild` 設定が効かなくなる可能性があるため)
+- `vite` は、当初は 7 のままにする想定だったが、vitest 5 が 8.3.5 に引き上げた。8 では `vitest.config.ts` の `esbuild` 設定が無視され型エラーにもなるため、その設定を削除した(oxc の既定が automatic runtime。`classic` にするとテスト42件が失敗することで確認)
 
 ## 手順
 - [x] 1. `vitest` / `@vitest/coverage-v8` を 5.0.5、`@types/node` を `^22` に更新
