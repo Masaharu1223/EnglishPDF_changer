@@ -168,3 +168,18 @@
 - [ ] 6. ローカル実機確認: 未ログイン翻訳、Googleログイン、履歴(一覧・詳細・削除)、PDFダウンロード、再生ボタン(運営者)
 - [x] 7. `code-reviewer` によるレビュー
 - [ ] 8. PR → マージ → 本番確認(問題があれば Instant Rollback)
+
+# vitest 5 への更新(Issue #39 PR C)
+
+## 方針
+- 残りの critical 2件(`vitest` / `tinypool`、開発用)を解消する。本番のビルドには影響しない
+- vitest 5 は Node 22.12 以上が必要。`@types/node` は `^22` 以上、`@vitest/coverage-v8` は vitest と同じ版にそろえる
+- `vite` は、当初は 7 のままにする想定だったが、vitest 5 が 8.3.5 に引き上げた。8 では `vitest.config.ts` の `esbuild` 設定が無視され型エラーにもなるため、その設定を削除した(oxc の既定が automatic runtime。`classic` にするとテスト42件が失敗することで確認)
+
+## 手順
+- [x] 1. `vitest` / `@vitest/coverage-v8` を 5.0.5、`@types/node` を `^22` に更新
+- [x] 2. `tsc`・`eslint .`・テスト(unit/API/UI/DB統合)・`next build` を通す。設定が効いているかを確認
+- [x] 3. `npm audit` を確認(critical が消えること)
+- [x] 4. README に「テストの実行には Node 22.12 以上」を書く
+- [ ] 5. `code-reviewer` によるレビュー
+- [ ] 6. PR → マージ → Issue #39 を閉じる
