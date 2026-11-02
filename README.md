@@ -98,7 +98,7 @@ Google ログインすると、処理結果(抽出した文とその翻訳)が N
 
 ### 前提条件
 
-- Node.js v20.9 以上(Next.js 16 の要件。`package-lock.json` を使用。npm 想定。`scripts/migrate.mjs` が Node 標準の `--env-file` を使う)
+- Node.js v20.9 以上(Next.js 16 の要件。**テスト(vitest 5)を動かすなら v22.12 以上**。`package-lock.json` を使用。npm 想定。`scripts/migrate.mjs` が Node 標準の `--env-file` を使う)
 - Neonプロジェクト(DB用)
 - Google CloudのOAuthクライアント(Googleログイン用)
 - Anthropic・ElevenLabsのAPIキー
