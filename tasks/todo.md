@@ -183,3 +183,18 @@
 - [x] 4. README に「テストの実行には Node 22.12 以上」を書く
 - [ ] 5. `code-reviewer` によるレビュー
 - [ ] 6. PR → マージ → Issue #39 を閉じる
+
+# CI の追加(Issue #45)
+
+## 方針(協議して決定。詳細は Issue #45)
+- `check` ジョブ(秘密の値なし): `tsc` → lint → 単体・API・UI テスト → `next build` → `npm audit --omit=dev --audit-level=high`。Node 24.x
+- `db-test` ジョブ(DB 統合テスト): Neon の `ci` ブランチ(Schema-only)に接続。実行は 1 つずつ。**別の PR で追加する**(Secrets の準備が要るため)
+- ブランチ保護(CI を必須にする)は、数回安定してから
+
+## 手順
+- [x] 1. Neon に `ci` ブランチを作成(Schema-only、自動削除なし)。ロール `app_user` / `neondb_owner` の引き継ぎを確認(あなた)
+- [ ] 2. `ci` ブランチのロールのパスワードを、本番と別の値にする(あなた)
+- [x] 3. `.github/workflows/ci.yml`(`check` ジョブ)と `test:unit` スクリプトを追加。環境変数なしでローカルで通ることを確認
+- [ ] 4. PR → CI が動くことを確認 → **わざと壊した PR で、CI が落ちることを確認**
+- [ ] 5. 別 PR: `db-env.ts` に `DATABASE_URL_TEST_APP` を追加し、`db-test` ジョブを追加(GitHub の Secrets を、あなたが登録)
+- [ ] 6. 数回安定したら、ブランチ保護を入れる(あなた)

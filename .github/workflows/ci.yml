@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# このワークフローは、リポジトリの中身を読むだけでよい(書き込み権限は渡さない)
+permissions:
+  contents: read
+
+# 同じブランチで続けて push したら、古い実行は止める(新しい結果だけ見れば足りる)
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # 秘密の値を一切使わない確認。フォークからの PR でも動く。
+  # 安い順(速く落ちる順)に並べている。
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      # 本番(Vercel)に合わせて Node 24。vitest 5 の要件(22.12 以上)も満たす
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: 依存パッケージを入れる(package-lock.json のとおりに)
+        run: npm ci
+
+      - name: 型チェック
+        run: npx tsc --noEmit
+
+      - name: lint
+        run: npm run lint
+
+      # DB 統合テストは含めない(本物の DB が要るため。別のジョブで動かす予定)
+      - name: テスト(単体・API・UI)
+        run: npm run test:unit
+
+      # 本番のビルドが壊れていないか。秘密の値は使わず、ダミーの認証設定を渡す
+      # (渡さないと、ビルド中に Better Auth のエラーログが大量に出る)
+      - name: ビルド
+        run: npm run build
+        env:
+          BETTER_AUTH_SECRET: ci-dummy-secret-not-a-real-one-0123456789
+          BETTER_AUTH_URL: http://localhost:3000
+
+      # 本番で使うライブラリ(開発用を除く)に、high 以上の脆弱性がないか。
+      # 開発用を含めると、ESLint 周辺の moderate で常に失敗するため、--omit=dev にしている
+      - name: 脆弱性チェック(本番の依存のみ)
+        run: npm audit --omit=dev --audit-level=high
