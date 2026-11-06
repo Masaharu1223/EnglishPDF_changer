@@ -1,3 +1,6 @@
+// 使用量まわりの純粋な関数(subjectFor, bucketsFor, nextResetAtIso, limitMessage)をテストする。
+// DBには触れず、主体の判定・枠の組み立て・リセット時刻・案内文を確かめる。
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { bucketsFor, limitMessage, nextResetAtIso, subjectFor } from "@/lib/usage";
 import { getUsageLimits } from "@/lib/usage-limits";
@@ -9,7 +12,9 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllEnvs());
 
+// 引数: なし / 返り値: 現在の環境変数に基づく使用量の上限値
 const limits = () => getUsageLimits();
+// 引数: メールアドレス, メール確認済みか(既定 true) / 返り値: テスト用のセッション
 const session = (email: string, emailVerified = true) => ({ user: { id: `id-${email}`, email, emailVerified } });
 
 describe("subjectFor(誰の使用量として数えるか)", () => {
@@ -70,6 +75,7 @@ describe("bucketsFor(どの枠をまとめて確認するか)", () => {
   });
 
   it("同じIPは同じキー、別のIPは別のキーになる", () => {
+    // 引数: IPアドレス / 返り値: そのIPの枠のキー
     const key = (ip: string) => bucketsFor({ type: "anon", ip }, limits())[0].key;
     expect(key("198.51.100.7")).toBe(key("198.51.100.7"));
     expect(key("198.51.100.7")).not.toBe(key("198.51.100.8"));
@@ -99,10 +105,10 @@ describe("nextResetAtIso(次のリセット=次のUTC 0時=日本時間の9時)"
   it.each([
     ["2026-10-15T09:30:00.000Z", "2026-10-16T00:00:00.000Z"],
     ["2026-10-15T23:59:59.999Z", "2026-10-16T00:00:00.000Z"],
-    ["2026-10-16T00:00:00.000Z", "2026-10-17T00:00:00.000Z"], // ちょうど0時なら、次の日
-    ["2026-10-31T12:00:00.000Z", "2026-11-01T00:00:00.000Z"], // 月末
-    ["2026-12-31T12:00:00.000Z", "2027-01-01T00:00:00.000Z"], // 年末
-    ["2028-02-28T12:00:00.000Z", "2028-02-29T00:00:00.000Z"], // うるう年
+    ["2026-10-16T00:00:00.000Z", "2026-10-17T00:00:00.000Z"],
+    ["2026-10-31T12:00:00.000Z", "2026-11-01T00:00:00.000Z"],
+    ["2026-12-31T12:00:00.000Z", "2027-01-01T00:00:00.000Z"],
+    ["2028-02-28T12:00:00.000Z", "2028-02-29T00:00:00.000Z"],
     ["2028-02-29T12:00:00.000Z", "2028-03-01T00:00:00.000Z"],
   ])("%s → %s", (now, expected) => {
     expect(nextResetAtIso(new Date(now))).toBe(expected);

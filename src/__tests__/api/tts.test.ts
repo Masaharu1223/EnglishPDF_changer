@@ -1,3 +1,5 @@
+// POST /api/tts(音声生成)のAPIルートをテストする。
+// 認証・許可リスト・入力チェック・エラー時の情報漏れがないことを確かめる。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
@@ -7,6 +9,7 @@ vi.mock("@/lib/elevenlabs", () => ({ generateSpeech: mocks.generateSpeech }));
 
 import { POST } from "@/app/api/tts/route";
 
+// 引数: リクエスト本文 / 返り値: POST ルートの応答(Promise)
 const call = (body: unknown) =>
   POST(
     new NextRequest("http://localhost/api/tts", {
@@ -16,6 +19,7 @@ const call = (body: unknown) =>
     })
   );
 
+// 引数: メールアドレス, メール確認済みか(既定 true) / 返り値: テスト用のセッション
 const user = (email: string, emailVerified = true) => ({ user: { id: "u1", email, emailVerified } });
 
 beforeEach(() => {

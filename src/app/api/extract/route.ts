@@ -1,6 +1,9 @@
+// テキスト抽出API。アップロードされたPDF/TXT(base64)から本文テキストを取り出して返す。
+
 import { NextRequest, NextResponse } from "next/server";
 import { extractTextFromPDF, extractTextFromTXT } from "@/lib/pdf-parser";
 
+// 引数: request(JSONで fileName と fileData を含む) / 返り値: 抽出したテキストのJSON
 export async function POST(request: NextRequest) {
   try {
     const { fileName, fileData } = await request.json();

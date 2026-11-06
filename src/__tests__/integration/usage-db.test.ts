@@ -1,12 +1,12 @@
+// 本物のPostgres(Neonのテスト用ブランチ)で、使用量の予約・返却・残量を確かめる統合テスト。
+// DATABASE_URL_TEST_OWNER が未設定なら、このファイルのテストは飛ばされる。
+
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Pool } from "@neondatabase/serverless";
 import { randomUUID } from "node:crypto";
 import { resolveTestDb } from "./db-env";
 import type { Reservation, UsageSubject } from "@/lib/usage";
 
-// 本物のPostgres(Neonのテスト用ブランチ)で、使用量の予約・返却・残量を確かめる。
-// 同時に大量のリクエストが来ても上限を超えないこと、半端な状態が残らないことが主眼。
-// DATABASE_URL_TEST_OWNER が未設定なら、このファイルのテストは飛ばされる。
 const db = resolveTestDb();
 
 vi.setConfig({ testTimeout: 90_000, hookTimeout: 60_000 });
@@ -17,20 +17,23 @@ describe.skipIf(!db)("usage テーブルの予約・返却(本物のPostgres)", 
   let dbModule: typeof import("@/lib/db");
   const originalAppUrl = process.env.DATABASE_URL_APP;
 
+  // 引数: ユーザーID(省略時は乱数) / 返り値: ログイン済みユーザーの主体
   const user = (id = randomUUID()): UsageSubject => ({ type: "user", userId: id });
+  // 引数: IPアドレス / 返り値: 未ログインの主体
   const anon = (ip: string): UsageSubject => ({ type: "anon", ip });
+  // 引数: 主体 / 返り値: その主体のユーザーID
   const sub = (s: UsageSubject) => (s as { userId: string }).userId;
 
-  // 所有者ロールで、テーブルの中身を直接読む(アプリの経路を通さずに確かめるため)
+  // 引数: 主体キー / 返り値: 所有者ロールで直接読んだ量(行がなければ null)
   const amount = async (key: string): Promise<number | null> => {
     const r = await owner.query("select amount from usage where subject_key = $1", [key]);
     return r.rows[0]?.amount ?? null;
   };
+  // 引数: なし / 返り値: usage テーブルの全行(subject_key, amount)
   const allRows = async () =>
     (await owner.query("select subject_key, amount from usage order by subject_key")).rows;
 
   beforeAll(async () => {
-    // アプリの接続先を、テスト用ブランチ(app_user)に差し替えてから、モジュールを読み込む
     process.env.DATABASE_URL_APP = db!.appUrl;
     owner = new Pool({ connectionString: db!.ownerUrl });
     usage = await import("@/lib/usage");
@@ -96,7 +99,6 @@ describe.skipIf(!db)("usage テーブルの予約・返却(本物のPostgres)", 
     });
 
     it("【回帰】新しい主体の最初の予約が上限を超えるなら、拒否する(行も作らない)", async () => {
-      // ON CONFLICT ... WHERE だけの書き方では、新規行の初回が上限を素通りした
       const res = await usage.reserveUsage(user(), "translate_chars", 1001);
       expect(res).toEqual({ ok: false, reason: "personal" });
       expect(await allRows()).toEqual([]);
@@ -115,8 +117,6 @@ describe.skipIf(!db)("usage テーブルの予約・返却(本物のPostgres)", 
     });
 
     it("【複数の枠】途中の枠で失敗したら、先に加算した枠も取り消される(片方だけ減らない)", async () => {
-      // 未ログインの枠は、キーの順に anon:* → ip:… → others:* と処理する。
-      // 最後の others:* で失敗したとき、先の2つの加算が残らないことを確かめる
       vi.stubEnv("USAGE_LIMIT_ANON_IP_CHARS", "1000");
       vi.stubEnv("USAGE_LIMIT_OTHERS_TOTAL_CHARS", "500");
       const res = await usage.reserveUsage(anon("198.51.100.7"), "translate_chars", 600);
@@ -156,7 +156,7 @@ describe.skipIf(!db)("usage テーブルの予約・返却(本物のPostgres)", 
       const res = await usage.reserveUsage(u, "translate_chars", 300);
       if (!res.ok) throw new Error("予約できるはず");
       await usage.refundUsage(res.reservation);
-      await usage.refundUsage(res.reservation); // 二重に返却
+      await usage.refundUsage(res.reservation);
       expect(await amount(`u:${sub(u)}`)).toBe(0);
     });
 
@@ -165,7 +165,7 @@ describe.skipIf(!db)("usage テーブルの予約・返却(本物のPostgres)", 
       const res = await usage.reserveUsage(u, "translate_chars", 300);
       if (!res.ok) throw new Error("予約できるはず");
       const otherDay: Reservation = { ...res.reservation, day: "2000-01-01" };
-      await usage.refundUsage(otherDay); // 今日の行には当たらない
+      await usage.refundUsage(otherDay);
       expect(await amount(`u:${sub(u)}`)).toBe(300);
     });
 
@@ -200,24 +200,20 @@ describe.skipIf(!db)("usage テーブルの予約・返却(本物のPostgres)", 
 
       const anonSubjects = Array.from({ length: 100 }, (_, i) => anon(`198.51.100.${i + 1}`));
       const userSubjects = Array.from({ length: 100 }, () => user());
-      // 順番を混ぜて、キーの取る順番が食い違う状況を作る
       const all = anonSubjects.flatMap((a, i) => [a, userSubjects[i]]);
 
       const settled = await Promise.allSettled(
         all.map((s) => usage.reserveUsage(s, "translate_chars", 100))
       );
 
-      // デッドロック(Postgres の 40P01)や、その他の例外が1件も出ない
       expect(settled.filter((s) => s.status === "rejected")).toEqual([]);
 
       const results = settled.map((s) => (s as PromiseFulfilledResult<Awaited<ReturnType<typeof usage.reserveUsage>>>).value);
       const okAll = results.filter((r) => r.ok).length;
       const okAnon = results.filter((r, i) => r.ok && all[i].type === "anon").length;
 
-      // 全体の枠は、ちょうど 5,000 で止まる(200件中、成功は50件)
       expect(okAll).toBe(50);
       expect(await amount("others:*")).toBe(5000);
-      // 先に加算してから取り消された分が、残っていない(未ログイン全体の合計 = 成功した未ログインの数 × 100)
       expect(await amount("anon:*")).toBe(okAnon > 0 ? okAnon * 100 : null);
       const ipSum = (await owner.query("select coalesce(sum(amount),0)::int s from usage where subject_key like 'ip:%'")).rows[0].s;
       expect(ipSum).toBe(okAnon * 100);
@@ -226,7 +222,6 @@ describe.skipIf(!db)("usage テーブルの予約・返却(本物のPostgres)", 
     it("予約と返却が同時に起きても、最終値は(成功した予約 − 返却)と一致する", async () => {
       const u = user();
       vi.stubEnv("USAGE_LIMIT_USER_CHARS", "100000");
-      // 先に20件を予約しておく(2,000文字)
       const first = await Promise.all(
         Array.from({ length: 20 }, () => usage.reserveUsage(u, "translate_chars", 100))
       );
@@ -235,13 +230,12 @@ describe.skipIf(!db)("usage テーブルの予約・返却(本物のPostgres)", 
         return r.reservation;
       });
 
-      // その20件の返却と、新しい20件の予約を、同時に流す
       await Promise.all([
         ...reservations.map((r) => usage.refundUsage(r)),
         ...Array.from({ length: 20 }, () => usage.reserveUsage(u, "translate_chars", 100)),
       ]);
 
-      expect(await amount(`u:${sub(u)}`)).toBe(2000); // 2000 - 2000 + 2000
+      expect(await amount(`u:${sub(u)}`)).toBe(2000);
       expect(await amount("others:*")).toBe(2000);
     });
   });
@@ -254,7 +248,7 @@ describe.skipIf(!db)("usage テーブルの予約・返却(本物のPostgres)", 
       const before = await allRows();
 
       const r = await usage.getRemainingUsage(u, "translate_chars");
-      expect(r).toEqual({ remaining: 200, limit: 1000, constrainedBy: "pool" }); // 個人は700、全体は200
+      expect(r).toEqual({ remaining: 200, limit: 1000, constrainedBy: "pool" });
 
       expect(await allRows()).toEqual(before);
     });
@@ -275,9 +269,10 @@ describe.skipIf(!db)("usage テーブルの予約・返却(本物のPostgres)", 
   });
 
   describe("ロックの待ち時間(詰まったときは、数秒で諦めて断る)", () => {
+    // 引数: 待つ時間(ミリ秒) / 返り値: 指定時間後に完了する Promise
     const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-    // 別の接続で「全体の枠」の行をロックしたままにして、他のリクエストが詰まる状況を作る
+    // 引数: なし / 返り値: 全体の枠の行をロックしたまま保持し、解除用の release を持つオブジェクト(Promise)
     const seedAndLockPool = async () => {
       await owner.query(
         "insert into usage (subject_key, day, kind, amount) values ('others:*', (now() at time zone 'utc')::date, 'translate_chars', 50)"
@@ -304,7 +299,7 @@ describe.skipIf(!db)("usage テーブルの予約・返却(本物のPostgres)", 
       try {
         res = await Promise.race([
           usage.reserveUsage(user(), "translate_chars", 100),
-          sleep(8000).then(() => "stuck"), // 待ち時間の上限が効かないと、ここまで固まる
+          sleep(8000).then(() => "stuck"),
         ]);
       } finally {
         await lock.release();
@@ -312,10 +307,10 @@ describe.skipIf(!db)("usage テーブルの予約・返却(本物のPostgres)", 
       const elapsed = Date.now() - started;
 
       expect(res).toEqual({ ok: false, reason: "busy" });
-      expect(elapsed).toBeGreaterThanOrEqual(900); // 設定した時間は待った
-      expect(elapsed).toBeLessThan(6000); // いつまでも待たない
-      expect(await amount("others:*")).toBe(50); // 何も消費していない
-      expect(await allRows()).toHaveLength(1); // 個人の行も作られていない
+      expect(elapsed).toBeGreaterThanOrEqual(900);
+      expect(elapsed).toBeLessThan(6000);
+      expect(await amount("others:*")).toBe(50);
+      expect(await allRows()).toHaveLength(1);
     });
 
     it("ロックが外れたあとは、また予約できる", async () => {
@@ -352,14 +347,14 @@ describe.skipIf(!db)("usage テーブルの予約・返却(本物のPostgres)", 
       } finally {
         await lock.release();
       }
-      expect(await amount("others:*")).toBe(50); // 返却できなかったので、そのまま
+      expect(await amount("others:*")).toBe(50);
     });
 
     it("待ち時間の設定は、そのトランザクションの中だけ(使い回される接続に残らない)", async () => {
       vi.stubEnv("USAGE_LOCK_TIMEOUT_MS", "1000");
       await usage.reserveUsage(user(), "translate_chars", 100);
       const shown = await dbModule.getPool().query("show lock_timeout");
-      expect(shown.rows[0].lock_timeout).toBe("0"); // 既定(無制限)のまま
+      expect(shown.rows[0].lock_timeout).toBe("0");
     });
   });
 
@@ -380,7 +375,6 @@ describe.skipIf(!db)("usage テーブルの予約・返却(本物のPostgres)", 
         const broken = await import("@/lib/usage");
 
         await expect(broken.reserveUsage(user(), "translate_chars", 100)).rejects.toThrow();
-        // 返却の失敗は、元の処理を邪魔しないようにログだけ残す
         await expect(
           broken.refundUsage({ keys: ["u:x"], day: "2026-01-01", kind: "translate_chars", amount: 1 })
         ).resolves.toBeUndefined();

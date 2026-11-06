@@ -1,3 +1,6 @@
+// 許可リスト(FEATURE_ALLOWED_EMAILS)の解析と、機能を使えるユーザーかの判定をテストする。
+// メール未確認・部分一致・未設定などの安全側の挙動を確かめる。
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { isFeatureAllowed, parseAllowedEmails } from "@/lib/access";
 

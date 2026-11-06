@@ -1,3 +1,6 @@
+// クライアントIPの取り出し(getClientIp)と正規化(normalizeIp)をテストする。
+// IPv6 の /64 まとめや、ヘッダーの優先順位を確かめる。
+
 import { describe, expect, it } from "vitest";
 import { getClientIp, normalizeIp } from "@/lib/client-ip";
 

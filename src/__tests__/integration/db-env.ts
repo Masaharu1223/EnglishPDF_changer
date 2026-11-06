@@ -1,20 +1,17 @@
-import { existsSync } from "node:fs";
+// DB統合テストの接続先(テスト用ブランチ)を決める補助モジュール。
+// 本番と同じ接続先なら例外で中止し、本番DBを守る。
 
-// DB統合テストの接続先を決める。本番DBを壊さないための安全装置を兼ねる。
-//  - DATABASE_URL_TEST_OWNER(テスト用ブランチの所有者ロール)が未設定なら、統合テストは飛ばす
-//  - テスト用の接続先が、本番の接続先と同じなら、例外を投げて中止する
-//  - アプリ用(app_user)の接続先は、本番の app_user の資格情報に、テスト用ブランチの
-//    ホスト名を組み合わせて作る(ブランチは本番のロールとパスワードを引き継ぐため)。
-//    .env.local を書き換えずに済む。
+import { existsSync } from "node:fs";
 
 export interface TestDb {
   ownerUrl: string;
   appUrl: string;
 }
 
-// Neon の接続先は "ep-xxxx(-pooler).region.aws.neon.tech"。先頭が、ブランチごとのエンドポイントID
+// 引数: DB接続URL / 返り値: ブランチごとのエンドポイントID(ホスト名の先頭から -pooler を除いたもの)
 const endpointId = (url: string) => new URL(url).hostname.split(".")[0].replace(/-pooler$/, "");
 
+// 引数: なし / 返り値: テスト用DBの接続先(所有者用とアプリ用)。未設定なら null
 export function resolveTestDb(): TestDb | null {
   if (existsSync(".env.local")) process.loadEnvFile(".env.local");
 

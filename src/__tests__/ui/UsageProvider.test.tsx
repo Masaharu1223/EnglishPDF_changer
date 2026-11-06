@@ -1,4 +1,6 @@
-// @vitest-environment jsdom
+// @vitest-environment jsdom -- DOM描画のテストのため
+// UsageProvider と fetchUsage をテストする。
+// 使用状況の取得タイミング・共有・取り直し・失敗時の挙動を確かめる。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -11,14 +13,17 @@ vi.mock("@/lib/auth-client", () => ({ useSession: () => mocks.session }));
 
 import { UsageProvider, fetchUsage, useUsage } from "@/components/UsageProvider";
 
+// 引数: 残りの文字数, ログイン済みか(既定 false) / 返り値: テスト用の UsageInfo
 const info = (remaining: number, loggedIn = false): UsageInfo => ({
   loggedIn,
   capabilities: { tts: false },
   translate: { remaining, limit: 12_000, minCharge: 500, constrainedBy: "personal", resetAt: "2026-10-16T00:00:00.000Z" },
 });
+// 引数: 応答本文 / 返り値: 成功した fetch の応答を模したオブジェクト
 const ok = (body: unknown) => ({ ok: true, json: async () => body });
 
 const fetchMock = vi.fn();
+// 引数: children / 返り値: UsageProvider で包んだ要素
 const wrapper = ({ children }: { children: ReactNode }) => <UsageProvider>{children}</UsageProvider>;
 
 beforeEach(() => {
@@ -66,13 +71,12 @@ describe("UsageProvider", () => {
     const { result, rerender } = renderHook(() => useUsage(), { wrapper });
     await waitFor(() => expect(result.current.usage?.loggedIn).toBe(false));
 
-    // 2回目の取得は、完了を待たせて、途中の状態を確認する
     let finish!: (v: unknown) => void;
     fetchMock.mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
     mocks.session = { data: { user: { id: "u1" } }, isPending: false };
     rerender();
 
-    await waitFor(() => expect(result.current.usage).toBeNull()); // 古い値は消えている
+    await waitFor(() => expect(result.current.usage).toBeNull());
     await act(async () => finish(ok(info(30_000, true))));
     await waitFor(() => expect(result.current.usage?.loggedIn).toBe(true));
     expect(fetchMock).toHaveBeenCalledTimes(2);

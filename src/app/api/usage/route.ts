@@ -1,3 +1,5 @@
+// 使用量取得API。今日の残り翻訳文字数と、利用できる機能(音声)を返す読み取り専用のAPI。
+
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { isFeatureAllowed } from "@/lib/access";
@@ -5,13 +7,9 @@ import { getUsageLimits } from "@/lib/usage-limits";
 import { getRemainingUsage, nextResetAtIso, subjectFor } from "@/lib/usage";
 import type { UsageInfo } from "@/types";
 
-// リクエストごとにセッションと使用量を読むので、ビルド時に静的に評価させない。
 export const dynamic = "force-dynamic";
 
-// 画面に「今日の残り」を出し、音声などの機能を出し分けるための読み取り専用API。
-// 使用量の予約はしない。ここで「使える」と返しても、実際の判定は各APIルートが
-// 外部APIを呼ぶ直前に行う(この値を信用して判定を省かない)。
-// 許可リストのメールアドレスそのものは返さず、「使えるかどうか」だけを返す。
+// 引数: request(リクエスト) / 返り値: 使用量の情報(UsageInfo)のJSON
 export async function GET(request: NextRequest) {
   try {
     const session = await auth.api.getSession({ headers: request.headers });

@@ -1,4 +1,6 @@
-// @vitest-environment jsdom
+// @vitest-environment jsdom -- DOM描画のテストのため
+// SentenceCard の再生ボタンをテストする。
+// 使用状況・権限に応じた有効/無効の切り替えと、/api/tts の呼び出しを確かめる。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { UsageInfo } from "@/types";
@@ -10,6 +12,7 @@ vi.mock("@/components/UsageProvider", () => ({
 
 import SentenceCard from "@/components/SentenceCard";
 
+// 引数: ログイン済みか, 音声が使えるか / 返り値: テスト用の UsageInfo
 const usage = (loggedIn: boolean, tts: boolean): UsageInfo => ({
   loggedIn,
   capabilities: { tts },
@@ -17,6 +20,7 @@ const usage = (loggedIn: boolean, tts: boolean): UsageInfo => ({
 });
 
 const sentence = { id: "s0", original: "Hello world.", translation: "こんにちは世界。" };
+// 引数: なし / 返り値: 画面上の再生ボタン
 const button = () => screen.getByRole("button") as HTMLButtonElement;
 
 const fetchMock = vi.fn();
@@ -25,7 +29,6 @@ let playSpy: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
   vi.spyOn(console, "error").mockImplementation(() => {});
-  // jsdom には音声の再生機能がない
   playSpy = vi.spyOn(window.HTMLMediaElement.prototype, "play").mockImplementation(() => Promise.resolve());
 });
 afterEach(() => {
@@ -100,7 +103,7 @@ describe("SentenceCard の再生ボタン(音声は試験導入で、許可さ�
     fireEvent.click(button());
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(button().disabled).toBe(false)); // 読み込み中の表示が戻る
+    await waitFor(() => expect(button().disabled).toBe(false));
     expect(playSpy).not.toHaveBeenCalled();
   });
 });

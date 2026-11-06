@@ -1,7 +1,11 @@
+// 日時の表示(JST)と、上限超過時の警告文をテストする。
+// タイムゾーンの明記や、ログイン有無による文面の違いを確かめる。
+
 import { describe, expect, it } from "vitest";
 import { formatDateTimeJST, overLimitMessage } from "@/lib/format";
 import type { UsageInfo } from "@/types";
 
+// 引数: translate の上書き値, ログイン済みか / 返り値: テスト用の UsageInfo
 const usage = (over: Partial<UsageInfo["translate"]> = {}, loggedIn = false): UsageInfo => ({
   loggedIn,
   capabilities: { tts: false },

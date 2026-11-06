@@ -1,16 +1,14 @@
+// 英単語のトークンから辞書検索用の語形を取り出し、Oxford Learner's Dictionaries を開く。
+
 const OXFORD_DICTIONARY_BASE_URL =
   "https://www.oxfordlearnersdictionaries.com/definition/english/";
 
-/**
- * 空白区切りのトークンから、辞書検索に使う語形だけを取り出す。
- * 前後に付いた句読点・記号(., 、"()! など)を取り除き、
- * 単語内部のアポストロフィ(don't 等)やハイフンはそのまま残す。
- * 例: "Hello," -> "Hello" / "(world)" -> "world" / "don't." -> "don't"
- */
+// 引数: 空白区切りのトークン / 返り値: 前後の句読点・記号を取り除いた語(内部のアポストロフィは残す)
 export function extractDictionaryWord(token: string): string {
   return token.replace(/^[^A-Za-z0-9']+|[^A-Za-z0-9']+$/g, "");
 }
 
+// 引数: 空白区切りのトークン / 返り値: なし(辞書ページを新しいタブで開く。語が空なら何もしない)
 export function openInOxfordDictionary(token: string) {
   const word = extractDictionaryWord(token);
   if (!word) return;

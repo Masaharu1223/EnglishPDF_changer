@@ -1,9 +1,7 @@
 // 試験導入の機能(音声・文字起こし)を使えるユーザーを、環境変数の許可リストで判定する。
-// 公開するときは、この判定の条件を変えるだけで済む(ブランチ操作は不要)。
-//
-// FEATURE_ALLOWED_EMAILS: 許可するメールアドレスをカンマ区切りで並べる。
-// 未設定・空のときは、誰にも許可しない(安全側)。
+// 許可リストは FEATURE_ALLOWED_EMAILS(カンマ区切り)で、未設定のときは誰も許可しない。
 
+// 引数: カンマ区切りのメールアドレス文字列(未設定可) / 返り値: 小文字にそろえたメールアドレスの Set
 export function parseAllowedEmails(raw: string | undefined): Set<string> {
   if (!raw) return new Set();
   return new Set(
@@ -19,8 +17,7 @@ interface AccessUser {
   emailVerified?: boolean | null;
 }
 
-// メールアドレスが未確認のアカウントは許可しない(他人のアドレスで登録される恐れに備える)。
-// Googleログインのメールアドレスは確認済みとして返る。
+// 引数: ユーザー情報、許可リスト文字列(省略時は環境変数) / 返り値: 機能を使ってよいかの真偽値
 export function isFeatureAllowed(
   user: AccessUser | null | undefined,
   rawAllowedEmails: string | undefined = process.env.FEATURE_ALLOWED_EMAILS

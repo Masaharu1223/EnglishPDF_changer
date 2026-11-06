@@ -1,3 +1,5 @@
+// 履歴保存API。ログイン中のユーザーの教材(タイトル・元テキスト・例文)を検証してDBに保存する。
+
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
@@ -5,6 +7,7 @@ import { saveDocument, type SaveDocumentSentence } from "@/lib/documents";
 
 const SOURCE_TYPES = ["pdf", "txt", "paste"] as const;
 
+// 引数: value(検証する値) / 返り値: 保存用の例文として正しい形かどうか(真偽値)
 function isValidSentence(value: unknown): value is SaveDocumentSentence {
   if (typeof value !== "object" || value === null) return false;
   const s = value as Record<string, unknown>;
@@ -15,6 +18,7 @@ function isValidSentence(value: unknown): value is SaveDocumentSentence {
   );
 }
 
+// 引数: request(JSONで title, sourceType, rawText, sentences を含む) / 返り値: 保存した教材の id のJSON
 export async function POST(request: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user?.id) {

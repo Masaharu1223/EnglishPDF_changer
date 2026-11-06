@@ -1,4 +1,6 @@
 "use client";
+// トップページ。PDF/TXTの読み込みまたはテキスト貼り付けから、英文の分割・翻訳を順に行い結果を表示する。
+// ログイン中は完了した結果を履歴に自動保存し、リロード後も結果を復元する。
 
 import { useEffect, useState } from "react";
 import FileUploader from "@/components/FileUploader";
@@ -17,9 +19,9 @@ type SourceType = "pdf" | "txt" | "paste";
 type SaveState = "idle" | "saving" | "saved" | "error";
 
 const SENTENCES_STORAGE_KEY = "pdfex:sentences";
-// 429 以外の失敗がこの回数だけ続いたら、残りのチャンクを叩かずに中断する
 const MAX_CONSECUTIVE_FAILURES = 3;
 
+// 引数: なし / 返り値: トップページの画面(JSX)
 export default function Home() {
   const { data: session } = useSession();
   const { refresh: refreshUsage } = useUsage();
@@ -30,9 +32,6 @@ export default function Home() {
   const [resultView, setResultView] = useState<ResultView>("cards");
   const [saveState, setSaveState] = useState<SaveState>("idle");
 
-  // Restore results persisted before the last reload. Runs once after
-  // mount (not during the initial useState) so the first client render
-  // still matches the server-rendered empty state - no hydration mismatch.
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem(SENTENCES_STORAGE_KEY);
@@ -43,22 +42,16 @@ export default function Home() {
         resultView: ResultView;
       }>;
       if (parsed.version === 1 && Array.isArray(parsed.sentences)) {
-        // 初回描画をサーバーと一致させる(hydration の不一致を避ける)ため、
-        // マウント後のeffectで保存済みの結果を復元する。意図した使い方
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- 初回描画をサーバーと一致させるため、マウント後に保存済みの結果を復元する
         setSentences(parsed.sentences);
         if (parsed.resultView === "cards" || parsed.resultView === "shadowing") {
           setResultView(parsed.resultView);
         }
       }
     } catch {
-      // Corrupt JSON or storage unavailable (Safari private mode, quota,
-      // disabled storage) - just start fresh, same as a first-time visit.
     }
   }, []);
 
-  // Keep persisted results in sync. setSentences([]) at the start of a new
-  // run is just another state change, so it clears the old entry too.
   useEffect(() => {
     try {
       if (sentences.length === 0) {
@@ -70,17 +63,12 @@ export default function Home() {
         );
       }
     } catch {
-      // Best-effort persistence only; ignore quota/private-mode errors.
     }
   }, [sentences, resultView]);
 
   const isBusy = state.status === "extracting" || state.status === "processing";
 
-  // Shared by file upload and text paste: both end up with a plain string
-  // of English text, split it into chunks and translate them one at a
-  // time so the sentence list and progress counter update as each result
-  // arrives, instead of waiting for the entire document to finish
-  // (see issue #10).
+  // 引数: text(英文のテキスト), meta(履歴に保存するタイトルと入力の種類) / 返り値: なし(分割・翻訳して画面と履歴を更新する)
   const processText = async (
     text: string,
     meta: { title: string; sourceType: SourceType }
@@ -100,10 +88,6 @@ export default function Home() {
     }
     const { chunks } = (await splitRes.json()) as { chunks: string[] };
 
-    // 翻訳を始める前に、今日の残りを超えないか確認して警告する。ここで止めれば、
-    // 途中で上限に当たって中途半端な結果になることを避けられる。表示のための事前チェックで、
-    // 実際の判定は翻訳APIがサーバー側で行う(取得できなければ、このチェックは省く)。
-    // サーバーは短いチャンクにも最低課金(minCharge)をかけるので、ここでも同じ数え方にする。
     const current = await fetchUsage();
     const minCharge = current?.translate.minCharge ?? 0;
     const totalChars = chunks.reduce((sum, c) => sum + Math.max(c.length, minCharge), 0);
@@ -112,20 +96,10 @@ export default function Home() {
       throw new Error(overLimitMessage(totalChars, current));
     }
 
-    // setSentences(prev => ...) only updates state, it doesn't let us read
-    // the final list synchronously once the loop ends (stale closure) - so
-    // collect the same items into a plain array in parallel for the save
-    // call below.
-    const collected: Sentence[] = [];
+    const collectedSentences: Sentence[] = [];
 
-    // Translate chunks sequentially. Deliberately not parallel - running
-    // multiple chunks concurrently is a separate future improvement (see
-    // api-pivot-long-form.prd.md Phase 3) and out of scope here.
     let nextSentenceIndex = 0;
     let limitMessage: string | null = null;
-    // 429 以外の失敗(サーバーの不具合・DB障害など)は、そのチャンクを飛ばして続ける。ただし
-    // 抜けのある結果を「完了」として保存しないよう数えておく。連続して失敗するときは、
-    // 残りも同じ理由で失敗する可能性が高いので、叩き続けずに中断する。
     let failedChunks = 0;
     let consecutiveFailures = 0;
     let aborted = false;
@@ -145,7 +119,6 @@ export default function Home() {
           body: JSON.stringify({ action: "translate", chunk: chunks[i] }),
         });
         if (translateRes.status === 429) {
-          // 上限に達した。残りのチャンクも同じく断られるので、続けずに中断する。
           const err = await translateRes.json().catch(() => ({}));
           limitMessage = err.error || "利用上限に達しました。";
           break;
@@ -163,11 +136,10 @@ export default function Home() {
           original: s.original,
           translation: s.translation,
         }));
-        collected.push(...newSentences);
+        collectedSentences.push(...newSentences);
         setSentences((prev) => [...prev, ...newSentences]);
         consecutiveFailures = 0;
       } catch (chunkError) {
-        // Skip the failed chunk but keep going (retry-free "log and continue").
         console.error(`Chunk ${i + 1}/${chunks.length} failed, skipping:`, chunkError);
         failedChunks += 1;
         consecutiveFailures += 1;
@@ -181,21 +153,17 @@ export default function Home() {
 
     void refreshUsage();
 
-    // 途中で上限に達したときは、案内を出して終わる。翻訳できた分は画面に残すが、
-    // 一部しか翻訳されていない結果を「完了」として履歴に保存しない。
     if (limitMessage) {
       setState({
         status: "error",
         error:
-          collected.length > 0
+          collectedSentences.length > 0
             ? `途中で翻訳を中断しました。${limitMessage} ここまでの結果は表示していますが、履歴には保存されません。`
             : limitMessage,
       });
       return;
     }
 
-    // 一部のチャンクが翻訳できなかったときも、翻訳できた分は表示するが、抜けのある結果は
-    // 「完了」として履歴に保存しない。
     if (failedChunks > 0) {
       setState({
         status: "error",
@@ -204,7 +172,7 @@ export default function Home() {
           (aborted
             ? `続けて失敗したため、翻訳を中断しました(残り${notProcessed}個は処理していません)。`
             : "") +
-          (collected.length > 0
+          (collectedSentences.length > 0
             ? "翻訳できた分は表示していますが、一部が抜けているため履歴には保存されません。"
             : "") +
           "時間をおいて、もう一度お試しください。",
@@ -218,10 +186,7 @@ export default function Home() {
       totalChunks: chunks.length,
     });
 
-    // Auto-save to history when logged in. Best-effort: a failed save
-    // never turns into a translation error, since the user's results are
-    // already shown either way.
-    if (session?.user && collected.length > 0) {
+    if (session?.user && collectedSentences.length > 0) {
       setSaveState("saving");
       try {
         const saveRes = await fetch("/api/documents", {
@@ -231,7 +196,7 @@ export default function Home() {
             title: meta.title,
             sourceType: meta.sourceType,
             rawText: text,
-            sentences: collected.map((s, index) => ({
+            sentences: collectedSentences.map((s, index) => ({
               position: index,
               original: s.original,
               translation: s.translation,
@@ -246,12 +211,12 @@ export default function Home() {
     }
   };
 
+  // 引数: file(選択されたファイル) / 返り値: なし(テキストを抽出して processText に渡す)
   const handleFileSelected = async (file: File) => {
     setSentences([]);
     setState({ status: "extracting", progress: "Extracting text from file..." });
 
     try {
-      // Step 1: Extract text from the uploaded file
       const arrayBuffer = await file.arrayBuffer();
       const base64 = btoa(
         new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), "")
@@ -279,12 +244,12 @@ export default function Home() {
     }
   };
 
+  // 引数: なし / 返り値: なし(貼り付けたテキストを processText に渡す)
   const handleTextSubmit = async () => {
     const trimmed = textInput.trim();
     if (!trimmed) return;
 
     try {
-      // ファイルではないので /api/extract は経由せず、貼り付けたテキストをそのまま渡す
       await processText(trimmed, {
         title: trimmed.slice(0, 40),
         sourceType: "paste",

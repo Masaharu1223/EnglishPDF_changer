@@ -1,3 +1,6 @@
+// Claude を使って英文を文ごとに抽出・日本語訳し、長い文章をチャンクに分ける。
+// Claude の応答後の失敗は、課金済みとして区別して扱う。
+
 import Anthropic from "@anthropic-ai/sdk";
 
 const anthropic = new Anthropic({
@@ -6,22 +9,16 @@ const anthropic = new Anthropic({
 
 const CLAUDE_MODEL = process.env.ANTHROPIC_MODEL ?? "claude-haiku-4-5-20251001";
 
-// Claude が応答したあとの失敗(解析できない・出力が途中で切れた)。この時点で
-// トークンは消費済みなので、呼び出し側は予約した分を返却してはいけない。
-// (API呼び出し自体の失敗は、普通の Error のまま。そちらは課金されていない)
 export class ClaudeResponseError extends Error {
+  // 引数: エラーメッセージ / 返り値: なし(エラーオブジェクトを初期化する)
   constructor(message: string) {
     super(message);
     this.name = "ClaudeResponseError";
   }
 }
 
-// 出力トークンの上限を chunk の長さに合わせる。固定(8192)だと、短い chunk に
-// 「長文を書いて」と埋め込まれたとき、1回で大量の出力を課金されてしまう。
-// 出力にはツール呼び出しのJSON(原文+訳)が入り、実測では chunk の文字数の約1.2倍の
-// トークンになる。その約1.7倍(2.0倍+256)を上限とし、通常は切れず、暴走したときの
-// 出力課金(入力の5倍の単価)が予約の見積もりを大きく超えないようにする。
 const MAX_OUTPUT_TOKENS = 8192;
+// 引数: 翻訳する chunk の文字列 / 返り値: 出力トークン数の上限
 export function maxTokensFor(chunk: string): number {
   return Math.min(MAX_OUTPUT_TOKENS, Math.ceil(chunk.length * 2.0) + 256);
 }
@@ -31,8 +28,6 @@ interface SentencePair {
   translation: string;
 }
 
-// Tool Use, not the newer Structured Outputs API, because Structured Outputs
-// currently only supports Sonnet 4.5/Opus 4.1, not CLAUDE_MODEL's Haiku 4.5.
 const translateTool: Anthropic.Tool = {
   name: "record_translations",
   description: "Record extracted unique English sentences with their Japanese translations",
@@ -55,27 +50,21 @@ const translateTool: Anthropic.Tool = {
   },
 };
 
-// Clean up raw text: decode HTML entities, remove timestamps, deduplicate
+// 引数: 生のテキスト / 返り値: HTML エンティティ・タイムスタンプ・[Music] などを除き、空白を詰めたテキスト
 export function cleanText(text: string): string {
   return text
-    // Decode HTML entities
     .replace(/&#39;/g, "'")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
-    // Remove timestamp markers like (00:00), (01:03), etc.
     .replace(/\(\d{1,2}:\d{2}\)/g, "")
-    // Remove [Music], [Applause], etc.
     .replace(/\[[\w\s]+\]/g, "")
-    // Collapse multiple spaces/newlines
     .replace(/\s+/g, " ")
     .trim();
 }
 
-// 句読点のない長い文章(PDFから抽出した箇条書きなど)は、1つの「文」が maxChars を超える。
-// そのままだと、サーバーが受け付ける最大文字数を超えて翻訳が失敗するので、空白の位置で
-// (空白もなければ maxChars で強制的に)分ける。
+// 引数: 1つの長い文、最大文字数 / 返り値: 最大文字数以下に分けた文字列の配列
 function splitLongPart(part: string, maxChars: number): string[] {
   const pieces: string[] = [];
   let rest = part;
@@ -89,9 +78,8 @@ function splitLongPart(part: string, maxChars: number): string[] {
   return pieces;
 }
 
-// Split text into chunks of roughly maxChars, breaking at sentence-like boundaries
+// 引数: テキスト、1チャンクの最大文字数(省略時1500) / 返り値: 文の区切りで分けたチャンクの配列
 export function splitIntoChunks(text: string, maxChars = 1500): string[] {
-  // Split on sentence-ending punctuation or newlines
   const parts = text
     .split(/(?<=[.!?])\s+/)
     .flatMap((part) => (part.length > maxChars ? splitLongPart(part, maxChars) : [part]));
@@ -111,6 +99,7 @@ export function splitIntoChunks(text: string, maxChars = 1500): string[] {
   return chunks;
 }
 
+// 引数: 翻訳する chunk の文字列 / 返り値: 原文と日本語訳の組の配列
 export async function processChunk(chunk: string): Promise<SentencePair[]> {
   let response: Anthropic.Message;
   try {
@@ -135,16 +124,12 @@ ${chunk}`,
       ],
     });
   } catch (error) {
-    // 接続の失敗やタイムアウトは、応答が返らなかっただけで、サーバー側では生成と課金が
-    // 進んでいるかもしれない。未課金と言い切れないので、返却させない(安全側)。
-    // Claude が拒否した失敗(4xx/5xx・レート制限・過負荷)は未課金なので、そのまま投げて返却させる。
     if (error instanceof Anthropic.APIConnectionError) {
       throw new ClaudeResponseError(`Claude connection failed: ${error.message}`);
     }
     throw error;
   }
 
-  // ここから先は、応答を受け取ったあと(課金済み)。どんな失敗も返却させない。
   try {
     return parseResponse(response, chunk);
   } catch (error) {
@@ -155,9 +140,8 @@ ${chunk}`,
   }
 }
 
+// 引数: Claude の応答、chunk の文字列 / 返り値: 原文と日本語訳の組の配列(解析できなければ ClaudeResponseError)
 function parseResponse(response: Anthropic.Message, chunk: string): SentencePair[] {
-  // 費用の見積もり(1,000文字あたりのトークン数と単価)を実測で見直すためのログ。
-  // 本文は出さず、文字数とトークン数だけを残す。
   console.info(
     "claude_usage",
     JSON.stringify({

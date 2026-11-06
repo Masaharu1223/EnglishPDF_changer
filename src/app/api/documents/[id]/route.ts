@@ -1,8 +1,11 @@
+// 履歴削除API。ログイン中のユーザー自身の教材を1件削除する。
+
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { deleteDocument } from "@/lib/documents";
 
+// 引数: request(リクエスト), params(URLの id を含む) / 返り値: 削除結果(success)のJSON
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

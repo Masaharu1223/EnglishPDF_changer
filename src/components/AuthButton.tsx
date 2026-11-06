@@ -1,7 +1,10 @@
 "use client";
+// Googleログイン/ログアウトのボタンを表示するコンポーネント。
+// ログイン済みならユーザー画像と名前も出す。
 
 import { signIn, signOut, useSession } from "@/lib/auth-client";
 
+// 引数: なし / 返り値: ログイン状態に応じたボタン(読み込み中はプレースホルダー)のJSX
 export default function AuthButton() {
   const { data: session, isPending } = useSession();
 
@@ -13,7 +16,7 @@ export default function AuthButton() {
     return (
       <div className="flex items-center gap-3">
         {session.user.image && (
-          // eslint-disable-next-line @next/next/no-img-element
+          // eslint-disable-next-line @next/next/no-img-element -- 外部ドメインの画像で next/image の設定を避けるため
           <img
             src={session.user.image}
             alt=""

@@ -1,4 +1,6 @@
-// @vitest-environment jsdom
+// @vitest-environment jsdom -- DOM描画のテストのため
+// UsageNotice(今日の残りの表示)をテストする。
+// 残り・リセット時刻・ログイン案内・警告色・最低課金の注記を確かめる。
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render } from "@testing-library/react";
 import type { UsageInfo } from "@/types";
@@ -10,6 +12,7 @@ vi.mock("@/components/UsageProvider", () => ({
 
 import UsageNotice from "@/components/UsageNotice";
 
+// 引数: translate の上書き値, ログイン済みか / 返り値: テスト用の UsageInfo
 const usage = (
   translate: Partial<UsageInfo["translate"]> = {},
   loggedIn = false

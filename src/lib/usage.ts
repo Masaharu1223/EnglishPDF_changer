@@ -1,3 +1,6 @@
+// 外部の有料APIを呼ぶ前に、使用量を DB(usage テーブル)へ予約して上限を超えるなら断る。
+// 予約の取り消し、残量の取得、リセット時刻、案内文もここにある。
+
 import { createHmac } from "node:crypto";
 import type { PoolClient } from "@neondatabase/serverless";
 import { getPool } from "@/lib/db";
@@ -5,15 +8,8 @@ import { isFeatureAllowed } from "@/lib/access";
 import { getClientIp } from "@/lib/client-ip";
 import { getUsageLimits, type UsageLimits } from "@/lib/usage-limits";
 
-// 外部の有料APIを呼ぶ「前に」使用量を予約し、上限を超えるなら断る。
-// 使用量は Neon の usage テーブルに置く(サーバーレスはメモリを共有しないため)。
-
 export type UsageKind = "translate_chars";
 
-// 誰の使用量として数えるか。
-//  owner: 許可リストのアカウント(自分)。全体の予算には数えず、別枠の安全装置だけ
-//  user:  ログイン済みの自分以外のユーザー
-//  anon:  未ログイン
 export type UsageSubject =
   | { type: "owner"; userId: string }
   | { type: "user"; userId: string }
@@ -23,6 +19,7 @@ interface SessionLike {
   user: { id: string; email?: string | null; emailVerified?: boolean | null };
 }
 
+// 引数: セッション(未ログインなら null)、リクエストヘッダー / 返り値: 使用量を数える対象
 export function subjectFor(session: SessionLike | null, headers: Headers): UsageSubject {
   if (session?.user?.id) {
     return isFeatureAllowed(session.user)
@@ -32,8 +29,7 @@ export function subjectFor(session: SessionLike | null, headers: Headers): Usage
   return { type: "anon", ip: getClientIp(headers) };
 }
 
-// 生のIPアドレスは保存しない。鍵付きのハッシュにして、DBが漏れても元のIPを復元できないようにする。
-// 鍵は既存の BETTER_AUTH_SECRET を流用する(新しいシークレットを増やさないため)。
+// 引数: IPアドレス / 返り値: 鍵付きハッシュ(先頭32文字)
 function hashIp(ip: string): string {
   const secret = process.env.BETTER_AUTH_SECRET;
   if (!secret) throw new Error("BETTER_AUTH_SECRET is not set");
@@ -45,9 +41,7 @@ interface Bucket {
   limit: number;
 }
 
-// 1回の予約で、個人の枠と全体の枠をまとめて確認する。
-//   'u:<id>'    ログイン済みの個人    'ip:<hash>' 未ログインのIP
-//   'anon:*'    未ログイン全体        'others:*'  自分以外の全員の合計(予算の天井)
+// 引数: 使用量の対象、上限値一式 / 返り値: 確認する枠(キーと上限)の配列
 export function bucketsFor(subject: UsageSubject, limits: UsageLimits): Bucket[] {
   switch (subject.type) {
     case "owner":
@@ -66,15 +60,11 @@ export function bucketsFor(subject: UsageSubject, limits: UsageLimits): Bucket[]
   }
 }
 
-// 個人の枠を超えた(personal)か、全体の枠を超えた(pool)かで、画面に出す案内を変える。
+// 引数: 枠のキー / 返り値: 個人の枠なら "personal"、全体の枠なら "pool"
 function reasonFor(key: string): "personal" | "pool" {
   return key.startsWith("u:") || key.startsWith("ip:") ? "personal" : "pool";
 }
 
-// INSERT ... SELECT ... WHERE にしているのは、ON CONFLICT ... WHERE が更新側にしか
-// 効かず、新しいキーの1回目が上限を超えても通ってしまうため(本番DBでのドライランで確認済み)。
-// 条件を満たさないときは0行が返る。日付はUTC(トランザクション内の now() は一定なので、
-// 同じ予約の全バケットで同じ日になる)。
 const RESERVE_SQL = `
   INSERT INTO usage (subject_key, day, kind, amount)
   SELECT $1::text, (now() AT TIME ZONE 'utc')::date, $2::text, $3::int
@@ -91,20 +81,17 @@ export interface Reservation {
   amount: number;
 }
 
-// busy: 他のリクエストのロックを待ち切れなかった(または、デッドロックとして取り消された)。
-// 上限を超えたわけではないので、少し待って、もう一度試せばよい。
 export type ReserveResult =
   | { ok: true; reservation: Reservation }
   | { ok: false; reason: "personal" | "pool" | "busy" };
 
-// Postgres のエラーコード: 55P03 = ロックの待ち時間切れ、40P01 = デッドロックで取り消し
+// 引数: 捕まえたエラー / 返り値: ロック待ち切れまたはデッドロックによる失敗かの真偽値
 function isBusyError(error: unknown): boolean {
   const code = (error as { code?: string } | null)?.code;
   return code === "55P03" || code === "40P01";
 }
 
-// SET LOCAL は、パラメータ($1)を取れないので、検証済みの整数をそのまま埋め込む。
-// BEGIN と同じ1回の通信で送るので、往復は増えない(このトランザクションの中だけで有効)。
+// 引数: ロック待ちの最大時間(ミリ秒) / 返り値: ロック待ち時間を設定する BEGIN のSQL文
 function beginWithLockTimeout(lockTimeoutMs: number): string {
   if (!Number.isInteger(lockTimeoutMs) || lockTimeoutMs <= 0) {
     throw new Error("lockTimeoutMs must be a positive integer");
@@ -112,9 +99,7 @@ function beginWithLockTimeout(lockTimeoutMs: number): string {
   return `BEGIN; SET LOCAL lock_timeout = ${lockTimeoutMs}`;
 }
 
-// 全バケットを1つのトランザクションで予約する。どれか1つでも上限を超えたら全体を
-// ロールバックし、片方だけ消費されることがない。同時リクエストがお互いを待ち合って
-// デッドロックしないよう、キーの順に処理する。
+// 引数: 使用量の対象、使用量の種類、予約する量 / 返り値: 予約の成否(成功なら予約情報、失敗なら理由)
 export async function reserveUsage(
   subject: UsageSubject,
   kind: UsageKind,
@@ -147,9 +132,7 @@ export async function reserveUsage(
     try {
       await client.query("ROLLBACK");
     } catch {
-      // 接続が既に切れている場合は無視する(元のエラーを優先する)
     }
-    // 待ち時間切れ・デッドロックは、予約できなかっただけ。例外にせず「混み合っている」と返す
     if (isBusyError(error)) return { ok: false, reason: "busy" };
     throw error;
   } finally {
@@ -157,11 +140,8 @@ export async function reserveUsage(
   }
 }
 
-// 外部APIの呼び出しが失敗したときに、予約した分を戻す。予約した日(UTC)の行に対して戻すので、
-// 日付をまたいでも別の日の使用量を減らさない。返却の失敗は、元のエラーの処理を邪魔しないよう
-// ログに残すだけにする(戻せなかった分は、その日の枠が少し余計に減るだけ)。
+// 引数: 予約情報 / 返り値: なし(予約した分を使用量から戻す。失敗してもログに残すだけ)
 export async function refundUsage(reservation: Reservation): Promise<void> {
-  // 接続の取得も含めて、例外処理の中に入れる(DBに繋がらないときも、元の処理を邪魔しない)
   let client: PoolClient | undefined;
   try {
     client = await getPool().connect();
@@ -179,7 +159,6 @@ export async function refundUsage(reservation: Reservation): Promise<void> {
     try {
       await client?.query("ROLLBACK");
     } catch {
-      // 無視する
     }
     console.error("Failed to refund usage", error);
   } finally {
@@ -193,9 +172,7 @@ export interface RemainingUsage {
   constrainedBy: "personal" | "pool";
 }
 
-// 今日あと何文字使えるかを読み取る(予約はしない。画面に表示するためだけの値で、
-// 実際の判定は reserveUsage がサーバー側で行う)。個人の枠と全体の枠のうち、
-// 残りが最も小さいものを返す。
+// 引数: 使用量の対象、使用量の種類 / 返り値: 今日の残り文字数と、残りを決めた枠の種類
 export async function getRemainingUsage(
   subject: UsageSubject,
   kind: UsageKind
@@ -217,22 +194,22 @@ export async function getRemainingUsage(
     const remaining = Math.max(b.limit - (used.get(b.key) ?? 0), 0);
     if (remaining < min.remaining) min = { remaining, key: b.key };
   }
+  const personalBucket = buckets[0];
   return {
     remaining: min.remaining,
-    limit: buckets[0].limit, // 先頭は常に個人の枠
+    limit: personalBucket.limit,
     constrainedBy: reasonFor(min.key),
   };
 }
 
-// 使用量は UTC の日付ごとに数えるので、次のUTC 0時(日本時間の9時)にリセットされる。
-// API間のやりとりは ISO 8601 で返す(日付・時刻の規約)。
+// 引数: 基準の日時(省略時は現在) / 返り値: 次のUTC 0時(ISO 8601形式)
 export function nextResetAtIso(now: Date = new Date()): string {
   return new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)
   ).toISOString();
 }
 
-// 上限を超えたときに画面へ出す案内。UIでは時刻のタイムゾーンを必ず明示する。
+// 引数: 使用量の対象、上限を超えた理由 / 返り値: 画面に出す案内文
 export function limitMessage(
   subject: UsageSubject,
   reason: "personal" | "pool" | "busy"

@@ -1,10 +1,10 @@
+// POST /api/process(split と translate)のAPIルートをテストする。
+// 認証・Claude・使用量は偽物にし、処理の順序・ステータス・返却の有無を確かめる。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-// 認証・Claude・使用量(DB)は偽物に差し替える。確かめたいのは、窓口(APIルート)が
-// 「どの順番で・何を呼び・何を返すか」だけ。DBの動きは integration/ で本物を使って確かめる。
 const mocks = vi.hoisted(() => {
-  process.env.ANTHROPIC_API_KEY = "test-key"; // llm.ts が読み込み時に Anthropic クライアントを作るため
+  process.env.ANTHROPIC_API_KEY = "test-key";
   return {
     getSession: vi.fn(),
     processChunk: vi.fn(),
@@ -27,6 +27,7 @@ vi.mock("@/lib/usage", async (importOriginal) => ({
 import { POST } from "@/app/api/process/route";
 import { ClaudeResponseError } from "@/lib/llm";
 
+// 引数: リクエスト本文, 追加ヘッダー(省略可) / 返り値: POST ルートの応答(Promise)
 const call = (body: unknown, headers: Record<string, string> = {}) =>
   POST(
     new NextRequest("http://localhost/api/process", {
@@ -42,7 +43,7 @@ beforeEach(() => {
   vi.stubEnv("BETTER_AUTH_SECRET", "test-secret");
   vi.stubEnv("FEATURE_ALLOWED_EMAILS", "owner@example.com");
   vi.spyOn(console, "error").mockImplementation(() => {});
-  mocks.getSession.mockResolvedValue(null); // 既定は未ログイン
+  mocks.getSession.mockResolvedValue(null);
   mocks.reserveUsage.mockResolvedValue({ ok: true, reservation: RESERVATION });
   mocks.processChunk.mockResolvedValue([{ original: "Hi.", translation: "やあ。" }]);
 });
@@ -191,8 +192,8 @@ describe("POST /api/process: 上限を超えたとき(429)", () => {
     const body = await res.json();
     expect(body.reason).toBe("personal");
     expect(body.error).toContain("9:00(JST)");
-    expect(body.error).toContain("ログイン"); // 未ログインなので、ログインの案内つき
-    expect(new Date(body.resetAt).toISOString()).toBe(body.resetAt); // ISO 8601
+    expect(body.error).toContain("ログイン");
+    expect(new Date(body.resetAt).toISOString()).toBe(body.resetAt);
     expect(new Date(body.resetAt).getTime()).toBeGreaterThan(Date.now());
 
     const retryAfter = Number(res.headers.get("Retry-After"));
@@ -201,7 +202,7 @@ describe("POST /api/process: 上限を超えたとき(429)", () => {
     expect(retryAfter).toBeLessThanOrEqual(24 * 60 * 60);
 
     expect(mocks.processChunk).not.toHaveBeenCalled();
-    expect(mocks.refundUsage).not.toHaveBeenCalled(); // 予約できていないので、返却するものがない
+    expect(mocks.refundUsage).not.toHaveBeenCalled();
   });
 
   it("DBが混み合って予約できなかったとき(busy): 429 で、数秒後の再試行を促す。リセット時刻は返さない", async () => {

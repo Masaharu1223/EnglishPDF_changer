@@ -1,10 +1,8 @@
-// Groups sentences into lines for the shadowing text sheet. Breaking on
-// every sentence-ending punctuation mark makes short lines like "Are you
-// sure?" or "I'm ready." painfully choppy to read, so instead we accumulate
-// whole sentences onto a line until adding the next one would push the line
-// past LINE_LENGTH_THRESHOLD, then start a new line.
+// シャドーイング用のテキストシートのために、文を行にまとめる。
+
 const LINE_LENGTH_THRESHOLD = 80;
 
+// 引数: 原文を持つ文の配列、1行の最大文字数(省略時80) / 返り値: 文を詰めて作った行の配列
 export function buildShadowingLines(
   sentences: { original: string }[],
   threshold = LINE_LENGTH_THRESHOLD

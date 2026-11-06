@@ -1,4 +1,6 @@
 "use client";
+// 英文を単語ごとにクリック可能にし、Oxford Learner's Dictionariesで引けるようにするコンポーネント。
+// SentenceCardとShadowingSheetで共用する。
 
 import { openInOxfordDictionary } from "@/lib/dictionary";
 
@@ -6,9 +8,7 @@ interface ClickableEnglishTextProps {
   text: string;
 }
 
-// Splits English text on whitespace and makes each word clickable to look it
-// up in Oxford Learner's Dictionaries. Shared by SentenceCard (card view) and
-// ShadowingSheet (shadowing script view) so word lookup works in both places.
+// 引数: props(text: 表示する英文) / 返り値: 単語ごとにクリックできるspanの並びのJSX
 export default function ClickableEnglishText({ text }: ClickableEnglishTextProps) {
   return (
     <>

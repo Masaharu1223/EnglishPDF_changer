@@ -1,10 +1,9 @@
+// Claude呼び出し(processChunk)、出力上限(maxTokensFor)、文章の分割(splitIntoChunks)をテストする。
+// Anthropic SDK は偽物に差し替え、課金されたかもしれない失敗とそうでない失敗の区別を確かめる。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// Anthropic SDK は偽物に差し替える(外部APIは呼ばない・費用がかからない)。
-// 確かめたいのは、Claudeの応答を受けたあとの失敗と、呼ぶ前の失敗を区別できているか。
 const mocks = vi.hoisted(() => {
   process.env.ANTHROPIC_API_KEY = "test-key";
-  // SDK の「接続できなかった・タイムアウトした」例外の代わり(llm.ts は instanceof で見分ける)
   class APIConnectionError extends Error {}
   return { create: vi.fn(), APIConnectionError };
 });
@@ -17,6 +16,7 @@ vi.mock("@anthropic-ai/sdk", () => ({
 
 import { ClaudeResponseError, cleanText, maxTokensFor, processChunk, splitIntoChunks } from "@/lib/llm";
 
+// 引数: 上書きするフィールド / 返り値: Claudeの正常応答を模した偽物
 const response = (over: Record<string, unknown> = {}) => ({
   stop_reason: "tool_use",
   usage: { input_tokens: 100, output_tokens: 50 },
@@ -37,7 +37,7 @@ describe("processChunk: 課金されたかもしれない失敗は、返却さ�
   });
 
   it("応答を受け取ったあとの想定外の例外(usage が無いなど)も ClaudeResponseError", async () => {
-    mocks.create.mockResolvedValue({ stop_reason: "tool_use", content: [] }); // usage が undefined → TypeError
+    mocks.create.mockResolvedValue({ stop_reason: "tool_use", content: [] });
     await expect(processChunk("Hello.")).rejects.toBeInstanceOf(ClaudeResponseError);
   });
 });
@@ -85,14 +85,15 @@ describe("processChunk", () => {
 });
 
 describe("splitIntoChunks: 句読点のない長い文章でも、サーバーが受け付ける長さに収める", () => {
+  // 引数: 単語数 / 返り値: "word0 word1 ..." の形で単語を空白でつないだ文字列
   const words = (n: number) => Array.from({ length: n }, (_, i) => `word${i}`).join(" ");
 
   it("句読点がない長文は、空白の位置で最大文字数に収まるように分け、単語を欠かさない", () => {
-    const text = words(1_000); // 約6,900文字、句読点なし
+    const text = words(1_000);
     const chunks = splitIntoChunks(cleanText(text));
     expect(chunks.length).toBeGreaterThan(1);
     for (const c of chunks) expect(c.length).toBeLessThanOrEqual(1_501);
-    expect(chunks.join(" ")).toBe(text); // 欠けも重複もない
+    expect(chunks.join(" ")).toBe(text);
   });
 
   it("空白もない超長文は、最大文字数で強制的に分ける(2,000文字を超えるチャンクを作らない)", () => {

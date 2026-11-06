@@ -1,9 +1,12 @@
+// 履歴一覧ページ。ログイン中のユーザーが保存した教材を新しい順に一覧表示する。
+
 import Link from "next/link";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listDocuments } from "@/lib/documents";
 import { formatDateTimeJST } from "@/lib/format";
 
+// 引数: なし / 返り値: 履歴一覧の画面(未ログイン時はログイン案内)
 export default async function HistoryPage() {
   const session = await auth.api.getSession({ headers: await headers() });
 
