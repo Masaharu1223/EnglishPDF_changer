@@ -1,4 +1,6 @@
 "use client";
+// 表示中の要素をクライアント側でPDFに変換してダウンロードするボタン。
+// html2canvasで画像化しjsPDFでページ分割する。
 
 import { useState, type RefObject } from "react";
 import { PDF_MARGIN_PT, computePdfLayout } from "@/lib/pdf-layout";
@@ -9,10 +11,7 @@ interface DownloadPdfButtonProps {
   label?: string;
 }
 
-// Renders the target element into a PDF client-side (html2canvas rasterizes
-// the DOM, jsPDF packages the image into pages). Rasterizing avoids the
-// Japanese-font-embedding problem that plain text-based PDF generation
-// would hit, since translations mix English and Japanese.
+// 引数: props(targetRef: PDF化する要素, fileName: 保存名, label: ボタンの表示文言) / 返り値: ダウンロードボタンのJSX
 export default function DownloadPdfButton({
   targetRef,
   fileName,
@@ -20,6 +19,7 @@ export default function DownloadPdfButton({
 }: DownloadPdfButtonProps) {
   const [isGenerating, setIsGenerating] = useState(false);
 
+  // 引数: なし / 返り値: なし(対象要素をPDF化して保存する)
   const handleDownload = async () => {
     const target = targetRef.current;
     if (!target || isGenerating) return;
@@ -43,8 +43,6 @@ export default function DownloadPdfButton({
         pdf.internal.pageSize.getHeight()
       );
 
-      // Cut the tall rasterized image into page-sized slices and place each one
-      // inside the margins (see computePdfLayout for why not shift-and-repeat).
       slices.forEach((slice, index) => {
         const pageCanvas = document.createElement("canvas");
         pageCanvas.width = canvas.width;

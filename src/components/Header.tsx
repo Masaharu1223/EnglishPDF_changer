@@ -1,6 +1,10 @@
+// 全ページ共通のヘッダー。
+// 履歴ページへのリンクとログインボタンを置く。
+
 import Link from "next/link";
 import AuthButton from "./AuthButton";
 
+// 引数: なし / 返り値: 履歴リンクとログインボタンを含むヘッダーのJSX
 export default function Header() {
   return (
     <header className="border-b border-gray-200 bg-white">

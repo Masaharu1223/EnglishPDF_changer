@@ -1,4 +1,6 @@
 "use client";
+// 1文ぶんのカード(原文・翻訳・音声再生ボタン)を表示するコンポーネント。
+// 音声は未取得ならAPIで生成し、再生・停止を切り替える。
 
 import { useState, useRef } from "react";
 import type { Sentence } from "@/types";
@@ -10,14 +12,13 @@ interface SentenceCardProps {
   index: number;
 }
 
+// 引数: props(sentence: 表示する文, index: 0始まりの通し番号) / 返り値: 文カードのJSX
 export default function SentenceCard({ sentence, index }: SentenceCardProps) {
   const [audioUrl, setAudioUrl] = useState<string | undefined>(sentence.audioUrl);
   const [isLoading, setIsLoading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  // 音声の生成は試験導入で、許可されたアカウントだけが使える(判定はサーバー側でも行う)。
-  // 取得済みの音声(audioUrl)がある場合は、APIを呼ばないので再生できる。
   const { usage } = useUsage();
   const canPlay = usage?.capabilities.tts === true || !!audioUrl;
   const disabledReason =
@@ -27,6 +28,7 @@ export default function SentenceCard({ sentence, index }: SentenceCardProps) {
         ? "音声の再生は、現在限定公開中です"
         : "音声の再生は、現在限定公開中です(ログインが必要です)";
 
+  // 引数: なし / 返り値: なし(音声を再生、再生中なら停止する。未取得なら生成する)
   const handlePlay = async () => {
     if (isPlaying && audioRef.current) {
       audioRef.current.pause();

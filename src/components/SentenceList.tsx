@@ -1,4 +1,6 @@
 "use client";
+// 抽出した文のカード一覧を表示するコンポーネント。
+// 目次ジャンプ、全文コピー、PDFダウンロードを備える。
 
 import { useRef } from "react";
 import type { Sentence } from "@/types";
@@ -11,10 +13,12 @@ interface SentenceListProps {
   sentences: Sentence[];
 }
 
+// 引数: start(スクロール先の文の番号) / 返り値: なし(その文のカードまで滑らかにスクロールする)
 function scrollToSentence(start: number) {
   document.getElementById(`sentence-${start}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+// 引数: props(sentences: 表示する文の配列) / 返り値: 目次・ボタン・文カード一覧のJSX(空ならnull)
 export default function SentenceList({ sentences }: SentenceListProps) {
   const contentRef = useRef<HTMLDivElement>(null);
 

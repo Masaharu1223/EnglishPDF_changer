@@ -1,3 +1,5 @@
+// 履歴詳細ページ。保存済みの教材1件の例文を表示し、削除ボタンを提供する。
+
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
@@ -7,6 +9,7 @@ import { formatDateTimeJST } from "@/lib/format";
 import DeleteDocumentButton from "@/components/DeleteDocumentButton";
 import SentenceResultView from "@/components/SentenceResultView";
 
+// 引数: params(URLの id を含む) / 返り値: 履歴詳細の画面(未ログイン時はログイン案内、存在しなければ404)
 export default async function HistoryDetailPage({
   params,
 }: {

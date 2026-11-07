@@ -1,4 +1,6 @@
 "use client";
+// 2つの文言を一定間隔で切り替えて表示するコンポーネント。
+// 切り替え時のアニメーション用にクラスを付け替える。
 
 import { useState, useEffect } from "react";
 
@@ -8,6 +10,7 @@ interface RotatingTextProps {
   className?: string;
 }
 
+// 引数: props(texts: 切り替える2つの文言, interval: 切り替え間隔ms, className: 追加クラス) / 返り値: 切り替え表示のJSX
 export default function RotatingText({ texts, interval = 3000, className = "" }: RotatingTextProps) {
   const [index, setIndex] = useState(0);
   const [isFlipping, setIsFlipping] = useState(false);

@@ -1,4 +1,6 @@
 "use client";
+// カード一覧とシャドーイング用テキストを切り替えて表示するコンポーネント。
+// 履歴詳細ページ専用で、状態をこのコンポーネント内で完結させる。
 
 import { useState } from "react";
 import SentenceList from "./SentenceList";
@@ -11,9 +13,7 @@ interface SentenceResultViewProps {
   sentences: Sentence[];
 }
 
-// page.tsxのカード一覧/シャドーイング用テキスト切り替えと同じUIパターン。
-// page.tsx側はresultViewをsessionStorage永続化にも使っておりstateの持ち方が
-// 異なるため、page.tsxは変更せずこちらは履歴詳細ページ専用として自己完結させる。
+// 引数: props(sentences: 表示する文の配列) / 返り値: 表示切り替えボタンと選択中のビューのJSX(空ならnull)
 export default function SentenceResultView({ sentences }: SentenceResultViewProps) {
   const [resultView, setResultView] = useState<ResultView>("cards");
 

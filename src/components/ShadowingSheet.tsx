@@ -1,4 +1,6 @@
 "use client";
+// シャドーイング練習用の英文のみのスクリプトを表示するコンポーネント。
+// 短い文は同じ行にまとめ、コピーとPDF出力ができる。
 
 import { useRef } from "react";
 import type { Sentence } from "@/types";
@@ -11,9 +13,7 @@ interface ShadowingSheetProps {
   sentences: Sentence[];
 }
 
-// English-only script for shadowing practice: no Japanese translation, and
-// short sentences are grouped onto shared lines (see buildShadowingLines)
-// so the sheet reads like a natural script instead of one sentence per line.
+// 引数: props(sentences: 表示する文の配列) / 返り値: シャドーイング用スクリプトのJSX(空ならnull)
 export default function ShadowingSheet({ sentences }: ShadowingSheetProps) {
   const contentRef = useRef<HTMLDivElement>(null);
 

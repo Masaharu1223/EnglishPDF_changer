@@ -1,3 +1,5 @@
+// 文カードの件数が多いときに表示する、区間ジャンプ用の目次(1-10, 11-20 など)を作る。
+
 export interface TocGroup {
   start: number;
   end: number;
@@ -6,10 +8,7 @@ export interface TocGroup {
 const GROUP_SIZE = 10;
 const TOC_THRESHOLD = 100;
 
-// Card lists longer than TOC_THRESHOLD get a jump-to-section index grouped
-// in chunks of GROUP_SIZE (e.g. "1-10", "11-20"), since scrolling through
-// 100+ cards to find one is slow. Lists at or below the threshold return no
-// groups, so the index stays hidden for the common case.
+// 引数: 文の総数 / 返り値: 10件ずつの区間の配列(100件以下なら空配列)
 export function buildTocGroups(sentenceCount: number): TocGroup[] {
   if (sentenceCount <= TOC_THRESHOLD) return [];
 

@@ -1,3 +1,6 @@
+// 文書(documents)と文(sentences)の保存・一覧・取得・削除を、ユーザーごとに行う。
+// すべて1つのトランザクション内で app.user_id を設定し、行レベルセキュリティを効かせる。
+
 import { getPool } from "./db";
 
 export interface SaveDocumentSentence {
@@ -14,9 +17,7 @@ export interface SaveDocumentInput {
   sentences: SaveDocumentSentence[];
 }
 
-// documents 1行 + sentences N行を1トランザクションで保存する。
-// RLSは set_config('app.user_id', ...) をこのトランザクション内で設定することで
-// 効かせる(chunk-persistence.prd.md の保存方式どおり)。
+// 引数: 保存する文書の内容(ユーザーID・題名・原文・文の配列) / 返り値: 作成した文書のID
 export async function saveDocument(input: SaveDocumentInput): Promise<number> {
   const pool = getPool();
   const client = await pool.connect();
@@ -56,6 +57,7 @@ export interface DocumentSummary {
   sentenceCount: number;
 }
 
+// 引数: ユーザーID / 返り値: 文書の一覧(新しい順、文の件数つき)
 export async function listDocuments(userId: string): Promise<DocumentSummary[]> {
   const pool = getPool();
   const client = await pool.connect();
@@ -103,6 +105,7 @@ export interface DocumentDetail {
   sentences: { id: number; original: string; translation: string }[];
 }
 
+// 引数: ユーザーID、文書ID / 返り値: 文書と文の一覧(見つからなければ null)
 export async function getDocumentWithSentences(
   userId: string,
   documentId: number
@@ -155,6 +158,7 @@ export async function getDocumentWithSentences(
   }
 }
 
+// 引数: ユーザーID、文書ID / 返り値: 削除できたかの真偽値
 export async function deleteDocument(userId: string, documentId: number): Promise<boolean> {
   const pool = getPool();
   const client = await pool.connect();

@@ -1,3 +1,6 @@
+// PDFのレイアウト計算(computePdfLayout)をテストする。
+// 余白・ページ分割・不正な入力の扱いを確かめる。
+
 import { describe, expect, it } from "vitest";
 import { PDF_MARGIN_PT, computePdfLayout } from "@/lib/pdf-layout";
 

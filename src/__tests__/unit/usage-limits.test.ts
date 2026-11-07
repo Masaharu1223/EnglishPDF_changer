@@ -1,3 +1,6 @@
+// 使用量の上限値(getUsageLimits)をテストする。
+// 既定値、環境変数による上書き、不正な値の無視を確かめる。
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getUsageLimits } from "@/lib/usage-limits";
 

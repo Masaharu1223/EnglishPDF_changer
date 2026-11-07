@@ -1,3 +1,5 @@
+// 全ページ共通のレイアウト。フォントとヘッダー、使用量の状態(UsageProvider)を全ページに提供する。
+
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
@@ -20,6 +22,7 @@ export const metadata: Metadata = {
   description: "Extract English sentences from PDF/TXT files with Japanese translation and audio",
 };
 
+// 引数: children(各ページの内容) / 返り値: html/body で包んだ全ページ共通の画面(JSX)
 export default function RootLayout({
   children,
 }: Readonly<{

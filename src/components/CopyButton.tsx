@@ -1,4 +1,6 @@
 "use client";
+// テキストをクリップボードにコピーするボタン。
+// コピー後2秒間だけ表示が「コピーしました」に変わる。
 
 import { useState } from "react";
 
@@ -7,9 +9,11 @@ interface CopyButtonProps {
   label?: string;
 }
 
+// 引数: props(text: コピーする文字列, label: ボタンの表示文言) / 返り値: コピーボタンのJSX
 export default function CopyButton({ text, label = "コピー" }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
 
+  // 引数: なし / 返り値: なし(textをクリップボードへコピーする)
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(text);

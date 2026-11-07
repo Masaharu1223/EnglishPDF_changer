@@ -1,3 +1,5 @@
+// GET /api/usage(残量の読み取り専用API)をテストする。
+// 認証状態ごとの返り値、キャッシュ無効、エラー時の情報漏れがないことを確かめる。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
@@ -10,6 +12,7 @@ vi.mock("@/lib/usage", async (importOriginal) => ({
 
 import { GET, dynamic } from "@/app/api/usage/route";
 
+// 引数: リクエストヘッダー(省略可) / 返り値: GET ルートの応答(Promise)
 const call = (headers: Record<string, string> = {}) =>
   GET(new NextRequest("http://localhost/api/usage", { headers }));
 

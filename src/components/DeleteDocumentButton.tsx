@@ -1,4 +1,6 @@
 "use client";
+// 教材(ドキュメント)を削除するボタン。
+// 確認ダイアログのあとAPIで削除し、履歴一覧へ戻る。
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -7,10 +9,12 @@ interface DeleteDocumentButtonProps {
   id: number;
 }
 
+// 引数: props(id: 削除する教材のID) / 返り値: 削除ボタンのJSX
 export default function DeleteDocumentButton({ id }: DeleteDocumentButtonProps) {
   const router = useRouter();
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // 引数: なし / 返り値: なし(確認後に教材を削除し、履歴一覧へ遷移する)
   const handleDelete = async () => {
     if (!confirm("この教材を削除しますか?")) return;
 
@@ -22,9 +26,7 @@ export default function DeleteDocumentButton({ id }: DeleteDocumentButtonProps) 
         router.refresh();
         return;
       }
-    } catch {
-      // fall through to re-enable the button below
-    }
+    } catch {}
     setIsDeleting(false);
   };
 

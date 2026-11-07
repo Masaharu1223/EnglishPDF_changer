@@ -1,4 +1,6 @@
 "use client";
+// PDF/TXTファイルをドラッグ&ドロップまたはクリックで選ぶコンポーネント。
+// 拡張子が違うファイルは警告して弾く。
 
 import { useCallback, useRef, useState } from "react";
 
@@ -7,10 +9,12 @@ interface FileUploaderProps {
   disabled?: boolean;
 }
 
+// 引数: props(onFileSelected: 選択されたファイルの受け取り関数, disabled: 無効化フラグ) / 返り値: アップロード領域のJSX
 export default function FileUploader({ onFileSelected, disabled }: FileUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // 引数: file(選択されたファイル) / 返り値: なし(PDF/TXTなら親へ渡し、違えば警告する)
   const handleFile = useCallback(
     (file: File) => {
       const name = file.name.toLowerCase();
@@ -23,6 +27,7 @@ export default function FileUploader({ onFileSelected, disabled }: FileUploaderP
     [onFileSelected]
   );
 
+  // 引数: e(ドロップイベント) / 返り値: なし(最初のファイルを処理する)
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
@@ -33,11 +38,13 @@ export default function FileUploader({ onFileSelected, disabled }: FileUploaderP
     [handleFile]
   );
 
+  // 引数: e(ドラッグオーバーイベント) / 返り値: なし(ドラッグ中表示にする)
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
   }, []);
 
+  // 引数: なし / 返り値: なし(ドラッグ中表示を解除する)
   const handleDragLeave = useCallback(() => {
     setIsDragging(false);
   }, []);

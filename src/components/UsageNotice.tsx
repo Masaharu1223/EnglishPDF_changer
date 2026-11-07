@@ -1,15 +1,16 @@
 "use client";
+// 今日あと何文字まで翻訳できるかを表示するコンポーネント。
+// 利用状況が取得できていないときは何も出さない。
 
 import { useUsage } from "./UsageProvider";
 import { formatDateTimeJST } from "@/lib/format";
 
-// 「今日あと何文字まで翻訳できるか」を表示する。取得できていないときは何も出さない。
+// 引数: なし / 返り値: 残り文字数・リセット時刻・注記のJSX(未取得ならnull)
 export default function UsageNotice() {
   const { usage } = useUsage();
   if (!usage) return null;
 
   const { remaining, limit, minCharge, constrainedBy, resetAt } = usage.translate;
-  // 残りが最低課金に満たないと、実際には1回も翻訳できない(0でなくても使い切りの扱い)
   const exhausted = remaining < minCharge;
   const notes: string[] = [];
   if (constrainedBy === "pool") {
