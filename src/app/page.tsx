@@ -16,7 +16,7 @@ import type { Sentence, ProcessingState } from "@/types";
 type InputMode = "file" | "text";
 type ResultView = "cards" | "shadowing";
 type SourceType = "pdf" | "txt" | "paste";
-type SaveState = "idle" | "saving" | "saved" | "error";
+type SaveState = "idle" | "saving" | "saved" | "error" | "sessionExpired";
 
 const SENTENCES_STORAGE_KEY = "pdfex:sentences";
 const MAX_CONSECUTIVE_FAILURES = 3;
@@ -203,7 +203,9 @@ export default function Home() {
             })),
           }),
         });
-        setSaveState(saveRes.ok ? "saved" : "error");
+        setSaveState(
+          saveRes.ok ? "saved" : saveRes.status === 401 ? "sessionExpired" : "error"
+        );
       } catch (saveError) {
         console.error("Failed to save document:", saveError);
         setSaveState("error");
@@ -363,7 +365,9 @@ export default function Home() {
                   ? "履歴に保存しました"
                   : saveState === "error"
                     ? "履歴への保存に失敗しました(結果はこのまま表示されています)"
-                    : null}
+                    : saveState === "sessionExpired"
+                      ? "ログインの有効期限が切れたため、保存できませんでした。もう一度ログインしてください(結果はこのまま表示されています)"
+                      : null}
           </p>
         )}
 

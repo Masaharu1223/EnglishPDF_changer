@@ -197,6 +197,18 @@ describe("ホーム画面: 正常に完了したとき", () => {
     expect(await screen.findByText(/履歴への保存に失敗しました/)).toBeTruthy();
     expect(screen.getByText("Extracted Sentences (3)")).toBeTruthy();
   });
+
+  it("ログインの期限切れ(401)で保存できなかったら、再ログインを促す", async () => {
+    mocks.session.data = { user: { id: "u1" } };
+    documentsHandler = () => json({ error: "Unauthorized" }, 401);
+    render(<Home />);
+    submit();
+    expect(
+      await screen.findByText(/ログインの有効期限が切れたため、保存できませんでした/)
+    ).toBeTruthy();
+    expect(screen.queryByText(/履歴への保存に失敗しました/)).toBeNull();
+    expect(screen.getByText("Extracted Sentences (3)")).toBeTruthy();
+  });
 });
 
 describe("ホーム画面: 途中で上限(429)に達したとき", () => {
