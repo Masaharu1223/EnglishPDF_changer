@@ -102,6 +102,9 @@
 
 ### auth.ts
 - **`modelName` の設定**: `documents` / `sentences` の `user_id`(text 型)が参照する名前を、`users` / `sessions` / `accounts` / `verifications` という複数形にそろえている。Postgres では、`user` と `session` が SQL の予約語のため。
+- **セッションは、ログインから2時間で必ず切れる(延長しない)**: 盗まれたクッキーを長く使われないようにするため(Issue #50)。
+  - 「最後の操作から2時間」にしない理由: 盗んだ人がアクセスし続けると、そのたびに期限が延びて、ずっと使えてしまう。`disableSessionRefresh: true` で延長を止めている。
+  - 1時間ではなく2時間にした理由: 翻訳の途中で切れて、履歴に保存できなくなる場面を減らすため。
 
 ### auth-client.ts
 - **`baseURL` を省略している理由**: 同一オリジンの `/api/auth` へ、相対パスでリクエストさせるため。

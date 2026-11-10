@@ -4,6 +4,8 @@
 import { betterAuth } from "better-auth";
 import { Pool } from "@neondatabase/serverless";
 
+const SESSION_LIFETIME_SECONDS = 60 * 60 * 2;
+
 export const auth = betterAuth({
   database: new Pool({
     connectionString: process.env.DATABASE_URL_APP,
@@ -17,7 +19,11 @@ export const auth = betterAuth({
     },
   },
   user: { modelName: "users" },
-  session: { modelName: "sessions" },
+  session: {
+    modelName: "sessions",
+    expiresIn: SESSION_LIFETIME_SECONDS,
+    disableSessionRefresh: true,
+  },
   account: { modelName: "accounts" },
   verification: { modelName: "verifications" },
 });
