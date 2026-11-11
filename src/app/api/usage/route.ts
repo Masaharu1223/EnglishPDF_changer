@@ -2,10 +2,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { isFeatureAllowed } from "@/lib/access";
-import { getUsageLimits } from "@/lib/usage-limits";
-import { getRemainingUsage, nextResetAtIso, subjectFor } from "@/lib/usage";
-import type { UsageInfo } from "@/types";
+import { subjectFor } from "@/lib/usage";
+import { buildUsageInfo } from "@/lib/usage-info";
 
 export const dynamic = "force-dynamic";
 
@@ -13,18 +11,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   try {
     const session = await auth.api.getSession({ headers: request.headers });
-    const subject = subjectFor(session, request.headers);
-    const translate = await getRemainingUsage(subject, "translate_chars");
-
-    const body: UsageInfo = {
-      loggedIn: !!session?.user,
-      capabilities: { tts: isFeatureAllowed(session?.user) },
-      translate: {
-        ...translate,
-        minCharge: getUsageLimits().minChargeChars,
-        resetAt: nextResetAtIso(),
-      },
-    };
+    const body = await buildUsageInfo(session?.user ?? null, subjectFor(session, request.headers));
     return NextResponse.json(body, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("Usage error:", error);

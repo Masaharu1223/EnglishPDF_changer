@@ -1,7 +1,9 @@
 // 文書(documents)と文(sentences)の保存・一覧・取得・削除を、ユーザーごとに行う。
 // すべて1つのトランザクション内で app.user_id を設定し、行レベルセキュリティを効かせる。
 
+import type { PoolClient } from "@neondatabase/serverless";
 import { getPool } from "./db";
+import { consumeTicketForSave } from "./translation-ticket";
 
 export interface SaveDocumentSentence {
   position: number;
@@ -17,30 +19,57 @@ export interface SaveDocumentInput {
   sentences: SaveDocumentSentence[];
 }
 
+// 引数: 開始済みのトランザクション、保存する文書の内容 / 返り値: 作成した文書のID
+async function insertDocument(client: PoolClient, input: SaveDocumentInput): Promise<number> {
+  await client.query("select set_config('app.user_id', $1, true)", [input.userId]);
+  const result = await client.query<{ document_id: number }>(
+    `with new_document as (
+       insert into documents (user_id, title, source_type, raw_text)
+       values ($1, $2, $3, $4)
+       returning id
+     )
+     insert into sentences (document_id, user_id, position, original, translation)
+     select nd.id, $1, s.position, s.original, s.translation
+     from new_document nd,
+          jsonb_to_recordset($5::jsonb) as s(position int, original text, translation text)
+     returning document_id`,
+    [input.userId, input.title, input.sourceType, input.rawText, JSON.stringify(input.sentences)]
+  );
+  return result.rows[0].document_id;
+}
+
 // 引数: 保存する文書の内容(ユーザーID・題名・原文・文の配列) / 返り値: 作成した文書のID
 export async function saveDocument(input: SaveDocumentInput): Promise<number> {
-  const pool = getPool();
-  const client = await pool.connect();
+  const client = await getPool().connect();
   try {
     await client.query("BEGIN");
-    await client.query("select set_config('app.user_id', $1, true)", [input.userId]);
-
-    const result = await client.query<{ document_id: number }>(
-      `with new_document as (
-         insert into documents (user_id, title, source_type, raw_text)
-         values ($1, $2, $3, $4)
-         returning id
-       )
-       insert into sentences (document_id, user_id, position, original, translation)
-       select nd.id, $1, s.position, s.original, s.translation
-       from new_document nd,
-            jsonb_to_recordset($5::jsonb) as s(position int, original text, translation text)
-       returning document_id`,
-      [input.userId, input.title, input.sourceType, input.rawText, JSON.stringify(input.sentences)]
-    );
-
+    const id = await insertDocument(client, input);
     await client.query("COMMIT");
-    return result.rows[0].document_id;
+    return id;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+// 引数: 翻訳チケット、保存する文書の内容(ユーザーID以外) / 返り値: 作成した文書のID(チケットが使えなければ null)
+export async function saveDocumentWithTicket(
+  ticket: string,
+  input: Omit<SaveDocumentInput, "userId">
+): Promise<number | null> {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const userId = await consumeTicketForSave(client, ticket, input.rawText);
+    if (!userId) {
+      await client.query("ROLLBACK");
+      return null;
+    }
+    const id = await insertDocument(client, { ...input, userId });
+    await client.query("COMMIT");
+    return id;
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;

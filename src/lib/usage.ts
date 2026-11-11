@@ -15,7 +15,7 @@ export type UsageSubject =
   | { type: "user"; userId: string }
   | { type: "anon"; ip: string };
 
-interface SessionLike {
+export interface SessionLike {
   user: { id: string; email?: string | null; emailVerified?: boolean | null };
 }
 
@@ -86,17 +86,40 @@ export type ReserveResult =
   | { ok: false; reason: "personal" | "pool" | "busy" };
 
 // 引数: 捕まえたエラー / 返り値: ロック待ち切れまたはデッドロックによる失敗かの真偽値
-function isBusyError(error: unknown): boolean {
+export function isBusyError(error: unknown): boolean {
   const code = (error as { code?: string } | null)?.code;
   return code === "55P03" || code === "40P01";
 }
 
 // 引数: ロック待ちの最大時間(ミリ秒) / 返り値: ロック待ち時間を設定する BEGIN のSQL文
-function beginWithLockTimeout(lockTimeoutMs: number): string {
+export function beginWithLockTimeout(lockTimeoutMs: number): string {
   if (!Number.isInteger(lockTimeoutMs) || lockTimeoutMs <= 0) {
     throw new Error("lockTimeoutMs must be a positive integer");
   }
   return `BEGIN; SET LOCAL lock_timeout = ${lockTimeoutMs}`;
+}
+
+// 引数: 開始済みのトランザクション、使用量の対象、種類、予約する量 / 返り値: 予約の成否(失敗時は呼び出し側が ROLLBACK する)
+export async function reserveUsageInTransaction(
+  client: PoolClient,
+  subject: UsageSubject,
+  kind: UsageKind,
+  amount: number
+): Promise<{ ok: true; reservation: Reservation } | { ok: false; reason: "personal" | "pool" }> {
+  if (!Number.isInteger(amount) || amount <= 0) {
+    throw new Error("amount must be a positive integer");
+  }
+
+  const buckets = bucketsFor(subject, getUsageLimits()).sort((a, b) =>
+    a.key < b.key ? -1 : a.key > b.key ? 1 : 0
+  );
+  let day = "";
+  for (const bucket of buckets) {
+    const res = await client.query(RESERVE_SQL, [bucket.key, kind, amount, bucket.limit]);
+    if (res.rows.length === 0) return { ok: false, reason: reasonFor(bucket.key) };
+    day = res.rows[0].day as string;
+  }
+  return { ok: true, reservation: { keys: buckets.map((b) => b.key), day, kind, amount } };
 }
 
 // 引数: 使用量の対象、使用量の種類、予約する量 / 返り値: 予約の成否(成功なら予約情報、失敗なら理由)
@@ -109,25 +132,12 @@ export async function reserveUsage(
     throw new Error("amount must be a positive integer");
   }
 
-  const limits = getUsageLimits();
-  const buckets = bucketsFor(subject, limits).sort((a, b) =>
-    a.key < b.key ? -1 : a.key > b.key ? 1 : 0
-  );
-
   const client = await getPool().connect();
   try {
-    await client.query(beginWithLockTimeout(limits.lockTimeoutMs));
-    let day = "";
-    for (const bucket of buckets) {
-      const res = await client.query(RESERVE_SQL, [bucket.key, kind, amount, bucket.limit]);
-      if (res.rows.length === 0) {
-        await client.query("ROLLBACK");
-        return { ok: false, reason: reasonFor(bucket.key) };
-      }
-      day = res.rows[0].day as string;
-    }
-    await client.query("COMMIT");
-    return { ok: true, reservation: { keys: buckets.map((b) => b.key), day, kind, amount } };
+    await client.query(beginWithLockTimeout(getUsageLimits().lockTimeoutMs));
+    const result = await reserveUsageInTransaction(client, subject, kind, amount);
+    await client.query(result.ok ? "COMMIT" : "ROLLBACK");
+    return result;
   } catch (error) {
     try {
       await client.query("ROLLBACK");
@@ -140,20 +150,28 @@ export async function reserveUsage(
   }
 }
 
+// 引数: 開始済みのトランザクション、予約情報 / 返り値: なし(予約した分を使用量から戻す)
+export async function refundUsageInTransaction(
+  client: PoolClient,
+  reservation: Reservation
+): Promise<void> {
+  for (const key of [...reservation.keys].sort()) {
+    await client.query(
+      `UPDATE usage
+         SET amount = GREATEST(amount - $4::int, 0), updated_at = now()
+       WHERE subject_key = $1::text AND day = $2::date AND kind = $3::text`,
+      [key, reservation.day, reservation.kind, reservation.amount]
+    );
+  }
+}
+
 // 引数: 予約情報 / 返り値: なし(予約した分を使用量から戻す。失敗してもログに残すだけ)
 export async function refundUsage(reservation: Reservation): Promise<void> {
   let client: PoolClient | undefined;
   try {
     client = await getPool().connect();
     await client.query(beginWithLockTimeout(getUsageLimits().lockTimeoutMs));
-    for (const key of [...reservation.keys].sort()) {
-      await client.query(
-        `UPDATE usage
-           SET amount = GREATEST(amount - $4::int, 0), updated_at = now()
-         WHERE subject_key = $1::text AND day = $2::date AND kind = $3::text`,
-        [key, reservation.day, reservation.kind, reservation.amount]
-      );
-    }
+    await refundUsageInTransaction(client, reservation);
     await client.query("COMMIT");
   } catch (error) {
     try {
@@ -209,14 +227,15 @@ export function nextResetAtIso(now: Date = new Date()): string {
   ).toISOString();
 }
 
+export const BUSY_MESSAGE =
+  "現在、アクセスが集中しています。少し時間をおいて、もう一度お試しください。";
+
 // 引数: 使用量の対象、上限を超えた理由 / 返り値: 画面に出す案内文
 export function limitMessage(
   subject: UsageSubject,
   reason: "personal" | "pool" | "busy"
 ): string {
-  if (reason === "busy") {
-    return "現在、アクセスが集中しています。少し時間をおいて、もう一度お試しください。";
-  }
+  if (reason === "busy") return BUSY_MESSAGE;
   const reset = "毎日 9:00(JST)にリセットされます。";
   if (reason === "pool") {
     return `現在、ご利用が集中しているため、全体の利用上限に達しました。上限は${reset}`;
