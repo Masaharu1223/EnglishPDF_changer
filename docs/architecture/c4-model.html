@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF Exchange English C4モデル</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1b2430;
+    --muted: #5a6675;
+    --line: #d5dbe3;
+    --panel: #f5f7fa;
+    --edge: #3b4654;
+    --link: #0b5cad;
+    --c-person: #0b3a6b;
+    --c-system: #1168bd;
+    --c-container: #2e73b8;
+    --c-component: #cfe5fa;
+    --c-component-fg: #0b2a47;
+    --c-external: #6b6b6b;
+    --c-boundary: #7a8594;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1720; --fg: #e6ebf2; --muted: #9aa7b8; --line: #2a3644;
+      --panel: #16202b; --edge: #b6c2d1; --link: #7db8ff; --c-boundary: #8d99a8;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1720; --fg: #e6ebf2; --muted: #9aa7b8; --line: #2a3644;
+    --panel: #16202b; --edge: #b6c2d1; --link: #7db8ff; --c-boundary: #8d99a8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", "Segoe UI", sans-serif;
+    line-height: 1.75;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 32px 16px 80px; }
+  h1 { font-size: 1.7rem; margin: 0 0 4px; }
+  h2 { font-size: 1.3rem; margin: 48px 0 8px; padding-bottom: 6px; border-bottom: 2px solid var(--line); }
+  h3 { font-size: 1.05rem; margin: 24px 0 6px; }
+  p, li { font-size: 0.97rem; }
+  .meta { color: var(--muted); font-size: 0.88rem; margin: 0 0 16px; }
+  nav ol { margin: 8px 0 0; padding-left: 1.4em; }
+  nav a, p a { color: var(--link); }
+  .lead { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; }
+  .diagram {
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin: 12px 0;
+    overflow-x: auto; background: var(--bg);
+  }
+  .diagram svg { display: block; width: 100%; min-width: 760px; height: auto; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--panel); }
+  .table-wrap { overflow-x: auto; }
+  code { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-size: 0.88em; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 0.85rem; margin: 6px 0; }
+  .legend span::before {
+    content: ""; display: inline-block; width: 14px; height: 14px; border-radius: 3px;
+    margin-right: 6px; vertical-align: -2px; background: var(--sw); border: 1px solid var(--line);
+  }
+  .note { color: var(--muted); font-size: 0.88rem; }
+
+  /* SVG */
+  svg text { font-family: inherit; }
+  .box.person    { fill: var(--c-person); }
+  .box.system    { fill: var(--c-system); }
+  .box.container { fill: var(--c-container); }
+  .box.component { fill: var(--c-component); }
+  .box.external  { fill: var(--c-external); }
+  .box.db        { fill: var(--c-container); }
+  .cap.db        { fill: rgba(255,255,255,0.18); }
+  .txt { fill: #ffffff; }
+  .txt.component { fill: var(--c-component-fg); }
+  .boundary { fill: none; stroke: var(--c-boundary); stroke-width: 1.5; stroke-dasharray: 8 5; }
+  .boundary-label { fill: var(--muted); font-size: 13px; font-weight: 600; }
+  .edge { stroke: var(--edge); stroke-width: 1.5; fill: none; }
+  .edge-label { fill: var(--fg); font-size: 11.5px; text-anchor: middle; paint-order: stroke; stroke: var(--bg); stroke-width: 5px; stroke-linejoin: round; }
+  .svg-note { fill: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>PDF Exchange English のアーキテクチャ(C4モデル)</h1>
+  <p class="meta">作成日: 2026-11-04 ／ 対象: <code>main</code>(コミット <code>7b7a30c</code> 時点) ／ 図はこのページの JavaScript が描くので、ネットにつながなくても開けます</p>
+
+  <nav class="lead">
+    <strong>目次</strong>
+    <ol>
+      <li><a href="#how">C4モデルの読み方</a></li>
+      <li><a href="#l1">レベル1: システムコンテキスト図(誰が何と関わるか)</a></li>
+      <li><a href="#l2">レベル2: コンテナ図(どんな部品に分かれているか)</a></li>
+      <li><a href="#l3s">レベル3: コンポーネント図(サーバー側)</a></li>
+      <li><a href="#l3b">レベル3: コンポーネント図(ブラウザ側)</a></li>
+      <li><a href="#flow">主な処理の流れ(翻訳から保存まで)</a></li>
+      <li><a href="#data">データ(DB)の構成</a></li>
+      <li><a href="#deploy">動かす場所とCI</a></li>
+      <li><a href="#decisions">設計上の判断</a></li>
+      <li><a href="#maintain">この文書の更新のしかた</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="how">1. C4モデルの読み方</h2>
+  <p>C4モデルは、システムの全体像を「地図のズーム」のように 4 段階で描く方法です。広い範囲から始めて、少しずつ拡大します。</p>
+  <ol>
+    <li><strong>レベル1 システムコンテキスト</strong>: このシステムを 1 つの箱として、周りの人や外部サービスとの関係を描く。</li>
+    <li><strong>レベル2 コンテナ</strong>: システムの中を、動くもの(ブラウザ上のUI、サーバー、DB など)に分けて描く。「コンテナ」は Docker のことではなく、「独立して動く部品」の意味。</li>
+    <li><strong>レベル3 コンポーネント</strong>: 1 つのコンテナの中を、役割ごとのまとまり(API、ライブラリ)に分けて描く。</li>
+    <li><strong>レベル4 コード</strong>: クラスや関数の単位。ソースコード自体が最も正確なので、この文書では描かず、各箱にファイルの場所を書いている。</li>
+  </ol>
+  <div class="legend">
+    <span style="--sw: var(--c-person)">人</span>
+    <span style="--sw: var(--c-system)">このシステム</span>
+    <span style="--sw: var(--c-container)">コンテナ(動く部品・DB)</span>
+    <span style="--sw: var(--c-component)">コンポーネント</span>
+    <span style="--sw: var(--c-external)">外部のサービス</span>
+  </div>
+  <p class="note">矢印は「矢印の元が、先を呼ぶ・使う」向きです。矢印の文字は、何をするかと使う技術です。</p>
+
+  <h2 id="l1">2. レベル1: システムコンテキスト図</h2>
+  <p>PDF Exchange English は、PDF やテキストから英文を取り出し、日本語訳つきの学習カードとシャドーイング用テキストにする Web アプリです。Google でログインすると、結果が自動で保存されます。ログインしなくても、抽出・翻訳・音声再生は使えます(音声再生は現在、許可リストのアカウントだけ)。</p>
+  <div class="diagram"><svg id="svg-l1" role="img" aria-label="システムコンテキスト図"></svg></div>
+  <div class="table-wrap">
+  <table>
+    <tr><th>登場するもの</th><th>役割</th></tr>
+    <tr><td>利用者</td><td>英語学習者。未ログインでも使える。ログインすると履歴が残る。</td></tr>
+    <tr><td>オーナー</td><td>許可リスト(環境変数 <code>FEATURE_ALLOWED_EMAILS</code>)に入っているアカウント。音声再生を使える。利用制限は別枠で数える。</td></tr>
+    <tr><td>Claude API(Anthropic)</td><td>英文を日本語に翻訳する。費用がかかるので、利用制限をかけている。</td></tr>
+    <tr><td>ElevenLabs</td><td>英文を音声にする。費用がかかるので、現状はオーナーだけが使える。</td></tr>
+    <tr><td>Google</td><td>ログイン(OAuth)。パスワードは、このアプリでは持たない。</td></tr>
+    <tr><td>Neon</td><td>履歴・使用量・ログイン情報を保存する、マネージドの PostgreSQL。</td></tr>
+    <tr><td>Oxford Learner's Dictionaries</td><td>英単語をクリックすると、別タブで開く辞書サイト。アプリのサーバーからは呼ばない。</td></tr>
+  </table>
+  </div>
+
+  <h2 id="l2">3. レベル2: コンテナ図</h2>
+  <p>システムの中は、大きく 3 つの部品と、手元で使う 1 つのスクリプトに分かれます。</p>
+  <div class="diagram"><svg id="svg-l2" role="img" aria-label="コンテナ図"></svg></div>
+  <div class="table-wrap">
+  <table>
+    <tr><th>通信</th><th>内容</th></tr>
+    <tr><td>ブラウザ → サーバー</td><td>HTTPS で JSON をやり取りする。呼ぶ先は <code>/api/extract</code>(ファイルから文章を取り出す)、<code>/api/process</code>(分割・翻訳)、<code>/api/documents</code>(履歴の保存・削除)、<code>/api/tts</code>(音声)、<code>/api/usage</code>(残りの使用量)、<code>/api/auth/*</code>(ログイン)。</td></tr>
+    <tr><td>サーバー → Claude / ElevenLabs</td><td>API キーはサーバーだけが持つ。ブラウザには渡さない。</td></tr>
+    <tr><td>サーバー → Neon</td><td>権限を絞った <code>app_user</code> ロールで接続する。行レベルセキュリティ(RLS)で、他人の履歴は読めない。</td></tr>
+    <tr><td>マイグレーション → Neon</td><td>所有者ロールで、表の作成などを手元から実行する。所有者の接続文字列は Vercel に置かない。</td></tr>
+  </table>
+  </div>
+
+  <h2 id="l3s">4. レベル3: コンポーネント図(サーバー側)</h2>
+  <p>Next.js サーバーの中を、入口(ルート)と部品(lib)に分けた図です。左が外から呼ばれる入口で、真ん中がそこから使われる部品、右が外のサービスです。</p>
+  <div class="diagram"><svg id="svg-l3s" role="img" aria-label="サーバー側のコンポーネント図"></svg></div>
+  <p class="note">補足: 使用量の制限は、「誰の使用量か」を <code>usage</code> 部品が判定します。その判定で、利用者の種別(オーナーか、他の利用者か、未ログインか)を <code>access</code> 部品に問い合わせます。</p>
+
+  <h2 id="l3b">5. レベル3: コンポーネント図(ブラウザ側)</h2>
+  <p>ブラウザ上の UI(React)の中を分けた図です。上の横長の箱は、サーバー側(前の図の入口)を表します。</p>
+  <div class="diagram"><svg id="svg-l3b" role="img" aria-label="ブラウザ側のコンポーネント図"></svg></div>
+  <p class="note">補足: 履歴の詳細ページ(<code>/history/[id]</code>)は、<code>SentenceResultView</code> が同じ <code>SentenceList</code> と <code>ShadowingSheet</code> を使います。削除ボタン(<code>DeleteDocumentButton</code>)は <code>/api/documents/[id]</code> を呼びます。</p>
+
+  <h2 id="flow">6. 主な処理の流れ(翻訳から保存まで)</h2>
+  <ol>
+    <li><strong>文章を取り出す</strong>: ブラウザが PDF やテキストを <code>/api/extract</code> に送る。PDF は <code>pdf-parse</code> で読み、文字が取れなければ <code>tesseract.js</code> で OCR する。貼り付けた文章は、このステップを通らない。</li>
+    <li><strong>分割する</strong>: <code>/api/process</code> に <code>action: "split"</code> で本文を送ると、整形したうえで、約 1,500 文字ごとのかたまり(チャンク)に分けて返す。Claude も DB も使わない。</li>
+    <li><strong>チャンクごとに翻訳する</strong>: ブラウザが、チャンクを 1 つずつ <code>action: "translate"</code> で送る。サーバーは次の順に動く。
+      <ol>
+        <li>長すぎるチャンクは 413 で断る(上限を超えて枠を回避されないため)。</li>
+        <li>使用量を<strong>先に予約</strong>する(<code>reserveUsage</code>)。上限を超える場合や混み合っている場合は、429 で断る。</li>
+        <li>Claude を Tool Use で呼び、文ごとの原文と日本語訳を受け取る。</li>
+        <li>Claude の呼び出しが失敗したら、予約を返す(<code>refundUsage</code>)。</li>
+      </ol>
+      チャンクごとに結果が返るので、長い文章でも進み具合を画面に出せる。</li>
+    <li><strong>保存する</strong>: ログイン済みなら、結果を <code>/api/documents</code> に送って、<code>documents</code> と <code>sentences</code> に保存する。未ログインなら保存しない。</li>
+    <li><strong>音声を作る</strong>(オーナーのみ): 学習カードのボタンから <code>/api/tts</code> を呼ぶ。サーバーは ElevenLabs で音声を作り、<code>data:audio/mpeg;base64,...</code> の形で返す。再生した音声は、そのカードの画面の状態にだけ残る(再読み込みすると作り直しになる)。</li>
+  </ol>
+
+  <h2 id="data">7. データ(DB)の構成</h2>
+  <div class="table-wrap">
+  <table>
+    <tr><th>テーブル</th><th>内容</th><th>メモ</th></tr>
+    <tr><td><code>users</code> / <code>sessions</code> / <code>accounts</code> / <code>verifications</code></td><td>ログインの情報(Better Auth が使う)</td><td><code>db/migrations/0001_auth.sql</code></td></tr>
+    <tr><td><code>documents</code></td><td>1 回の処理 = 1 件。タイトル、入力の種類(<code>pdf</code> / <code>txt</code> / <code>paste</code>)、元の文章、作成日時</td><td><code>user_id</code> で <code>users</code> につながる。本人の行だけ読める(RLS)</td></tr>
+    <tr><td><code>sentences</code></td><td>1 文 = 1 行。位置、原文、日本語訳</td><td><code>documents</code> に紐づく。文書を消すと一緒に消える。本人の行だけ読める(RLS)</td></tr>
+    <tr><td><code>usage</code></td><td>1 日ごとの使用量(翻訳した文字数)</td><td>主キーは (<code>subject_key</code>, <code>day</code>, <code>kind</code>)。日付は UTC。</td></tr>
+  </table>
+  </div>
+  <p><code>usage.subject_key</code> は、「誰の使用量か」を表す文字列です。</p>
+  <ul>
+    <li><code>u:&lt;ユーザーID&gt;</code>: ログイン済みの個人(オーナーも同じ形)</li>
+    <li><code>ip:&lt;ハッシュ&gt;</code>: 未ログインのクライアントごと(生の IP は保存しない)</li>
+    <li><code>anon:*</code>: 未ログイン全体の合計</li>
+    <li><code>others:*</code>: オーナー以外の全員(未ログイン + ログイン済み)の合計。費用の天井</li>
+  </ul>
+
+  <h2 id="deploy">8. 動かす場所とCI</h2>
+  <div class="table-wrap">
+  <table>
+    <tr><th>場所</th><th>何があるか</th></tr>
+    <tr><td>Vercel</td><td>Next.js アプリ(Node.js 24)。<code>main</code> にマージすると、自動でデプロイされる。</td></tr>
+    <tr><td>Neon</td><td>本番と手元の開発で、同じ <code>main</code> ブランチの DB を使う。DB 統合テスト用に、別のブランチ(<code>test</code>、CI 用の <code>ci</code>)がある。</td></tr>
+    <tr><td>GitHub Actions</td><td>PR と <code>main</code> への push のたびに、型検査・lint・テスト・ビルド・依存パッケージの脆弱性チェックを実行する(<code>.github/workflows/ci.yml</code>)。DB 統合テストの CI 化は、これから追加する。</td></tr>
+    <tr><td>手元の PC</td><td>マイグレーションの実行(所有者ロール)、開発サーバー、DB 統合テスト。</td></tr>
+  </table>
+  </div>
+
+  <h2 id="decisions">9. 設計上の判断</h2>
+  <ul>
+    <li><strong>予約してから外部 API を呼ぶ</strong>: 翻訳の費用は、呼んだあとでは取り返せません。そのため、先に使用量を予約し、失敗したら返します。複数のリクエストが同時に来ても、枠を超えないよう DB 側で原子的に処理します。</li>
+    <li><strong>サーバーレスなので、状態は DB に置く</strong>: 関数はリクエストごとに別のインスタンスで動くことがあり、メモリで使用量を数えられません。</li>
+    <li><strong>アプリは、権限を絞った <code>app_user</code> で DB に接続する</strong>: 所有者ロールの接続文字列は、アプリの実行環境に置きません。万一アプリに脆弱性があっても、表の削除などはできません。</li>
+    <li><strong>RLS で、履歴を本人だけが読めるようにする</strong>: アプリのコードに加えて、DB 側でも守ります。</li>
+    <li><strong>IP アドレスは、鍵つきのハッシュにして保存する</strong>: DB が漏れても、元の IP を復元できないようにします。</li>
+    <li><strong>日付は UTC で保存し、画面ではタイムゾーンを明示する</strong>: 使用量の 1 日は UTC の日付で区切るので、日本時間の 9:00 にリセットされます。</li>
+    <li><strong>音声は、現状オーナーだけ</strong>: ElevenLabs の費用を抑える試験導入です。生成した音声は保存しておらず、再生のたびに再生成されます(改善案は Issue #44)。</li>
+  </ul>
+
+  <h2 id="maintain">10. この文書の更新のしかた</h2>
+  <p>図は、このファイルの末尾にある <code>&lt;script&gt;</code> の中の、箱(<code>nodes</code>)と矢印(<code>edges</code>)のデータから描いています。構成が変わったら、そのデータと上の説明を直してください。座標は手で決めているので、箱を足すときは、重ならないか、ブラウザで開いて確かめます。</p>
+  <p class="note">この文書は、コードを読んで人が書いたものです。コードと食い違っていたら、コードが正しいです。</p>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var NS = "http://www.w3.org/2000/svg";
+
+  // ---- 文字幅の見積り(日本語は 1em、英数字は約 0.58em)と折り返し ----
+  function textWidth(s, size) {
+    var n = 0;
+    for (var i = 0; i < s.length; i++) n += s.charCodeAt(i) > 255 ? size : size * 0.58;
+    return n;
+  }
+  function wrap(str, size, maxW) {
+    var out = [];
+    String(str).split("\n").forEach(function (para) {
+      var cur = "";
+      var tokens = para.match(/[\x21-\x7e]+|\s|[^\x00-\x7f]/g) || [""];
+      function push(tok) {
+        if (cur === "" && /^\s$/.test(tok)) return;
+        if (cur && textWidth(cur + tok, size) > maxW) { out.push(cur.replace(/\s+$/, "")); cur = ""; if (/^\s$/.test(tok)) return; }
+        if (textWidth(tok, size) > maxW) {
+          for (var i = 0; i < tok.length; i++) {
+            var ch = tok.charAt(i);
+            if (cur && textWidth(cur + ch, size) > maxW) { out.push(cur); cur = ""; }
+            cur += ch;
+          }
+        } else cur += tok;
+      }
+      tokens.forEach(push);
+      out.push(cur.replace(/\s+$/, ""));
+    });
+    return out;
+  }
+  function el(name, attrs, parent) {
+    var e = document.createElementNS(NS, name);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+
+  // ---- 箱の描画。高さは文章に合わせて必要なら伸ばす ----
+  var PAD = 12, T = 15, S = 11, D = 12, LH = 1.35;
+  function layoutNode(n) {
+    var inner = n.w - PAD * 2;
+    n._title = wrap(n.title, T, inner);
+    n._tech = n.tech ? wrap("[" + n.tech + "]", S, inner) : [];
+    n._desc = n.desc ? wrap(n.desc, D, inner) : [];
+    var need = PAD + n._title.length * T * LH + (n._tech.length ? 4 + n._tech.length * S * LH : 0) +
+      (n._desc.length ? 8 + n._desc.length * D * LH : 0) + PAD;
+    n.h = Math.max(n.h || 0, Math.ceil(need));
+  }
+  function drawNode(g, n) {
+    var cls = n.kind;
+    if (cls === "db") {
+      var hw = n.w / 2, cap = 12;
+      el("path", {
+        class: "box db",
+        d: "M" + n.x + "," + (n.y + cap) + " a" + hw + "," + cap + " 0 0 1 " + n.w + ",0 v" + (n.h - cap * 2) +
+           " a" + hw + "," + cap + " 0 0 1 " + (-n.w) + ",0 z"
+      }, g);
+      el("ellipse", { class: "cap db", cx: n.x + hw, cy: n.y + cap, rx: hw, ry: cap }, g);
+    } else {
+      el("rect", { class: "box " + cls, x: n.x, y: n.y, width: n.w, height: n.h, rx: 8 }, g);
+    }
+    var tcls = "txt " + (cls === "component" ? "component" : "");
+    var cx = n.x + n.w / 2;
+    var y = n.y + PAD + (cls === "db" ? 10 : 0);
+    function lines(arr, size, weight, italic, gap) {
+      arr.forEach(function (line) {
+        y += size * LH;
+        var t = el("text", { class: tcls, x: cx, y: y - size * 0.28, "text-anchor": "middle", "font-size": size }, g);
+        if (weight) t.setAttribute("font-weight", weight);
+        if (italic) t.setAttribute("font-style", "italic");
+        t.textContent = line;
+      });
+      y += gap || 0;
+    }
+    lines(n._title, T, "700", false, n._tech.length ? 4 : 8);
+    lines(n._tech, S, null, true, n._desc.length ? 8 : 0);
+    lines(n._desc, D, null, false, 0);
+  }
+
+  // ---- 矢印 ----
+  function center(n) { return { x: n.x + n.w / 2, y: n.y + n.h / 2 }; }
+  function border(n, toward) {
+    var c = center(n), dx = toward.x - c.x, dy = toward.y - c.y;
+    if (dx === 0 && dy === 0) return c;
+    var tx = dx === 0 ? Infinity : (n.w / 2) / Math.abs(dx);
+    var ty = dy === 0 ? Infinity : (n.h / 2) / Math.abs(dy);
+    var t = Math.min(tx, ty);
+    return { x: c.x + dx * t, y: c.y + dy * t };
+  }
+  function drawEdge(g, a, b, e) {
+    var via = e.via || [];
+    var first = via.length ? { x: via[0][0], y: via[0][1] } : center(b);
+    var last = via.length ? { x: via[via.length - 1][0], y: via[via.length - 1][1] } : center(a);
+    var pts = [border(a, first)];
+    via.forEach(function (p) { pts.push({ x: p[0], y: p[1] }); });
+    pts.push(border(b, last));
+    el("polyline", {
+      class: "edge", "marker-end": "url(#arrow)",
+      points: pts.map(function (p) { return p.x + "," + p.y; }).join(" ")
+    }, g);
+    if (!e.label) return;
+    var best = 0, bi = 0;
+    for (var i = 0; i < pts.length - 1; i++) {
+      var d = Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y);
+      if (d > best) { best = d; bi = i; }
+    }
+    var mx = (pts[bi].x + pts[bi + 1].x) / 2 + (e.dx || 0);
+    var my = (pts[bi].y + pts[bi + 1].y) / 2 + (e.dy || 0);
+    var ls = String(e.label).split("\n");
+    var t = el("text", { class: "edge-label", x: mx, y: my - (ls.length - 1) * 7 + 4 }, g);
+    ls.forEach(function (line, i) {
+      var ts = el("tspan", { x: mx, dy: i === 0 ? 0 : 14 }, t);
+      ts.textContent = line;
+    });
+  }
+
+  function render(id, spec) {
+    var svg = document.getElementById(id);
+    svg.setAttribute("viewBox", "0 0 " + spec.width + " " + spec.height);
+    var defs = el("defs", {}, svg);
+    var m = el("marker", { id: "arrow", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 8, markerHeight: 8, orient: "auto-start-reverse" }, defs);
+    el("path", { d: "M0,0 L10,5 L0,10 z", fill: "var(--edge)" }, m);
+    var byId = {};
+    spec.nodes.forEach(function (n) { layoutNode(n); byId[n.id] = n; });
+    (spec.boundaries || []).forEach(function (b) {
+      el("rect", { class: "boundary", x: b.x, y: b.y, width: b.w, height: b.h, rx: 12 }, svg);
+      var t = el("text", { class: "boundary-label", x: b.x + 14, y: b.y + 22 }, svg);
+      t.textContent = b.label;
+    });
+    spec.nodes.forEach(function (n) { drawNode(el("g", {}, svg), n); });
+    spec.edges.forEach(function (e) { drawEdge(el("g", {}, svg), byId[e.from], byId[e.to], e); });
+    (spec.notes || []).forEach(function (n) {
+      var t = el("text", { class: "svg-note", x: n.x, y: n.y }, svg);
+      t.textContent = n.text;
+    });
+  }
+
+  // =====================================================================
+  // レベル1: システムコンテキスト
+  // =====================================================================
+  render("svg-l1", {
+    width: 1000, height: 600,
+    nodes: [
+      { id: "user", kind: "person", x: 60, y: 24, w: 250, h: 110, title: "利用者", tech: "Person",
+        desc: "英語学習者。PDF やテキストから英文を取り出し、日本語訳つきの学習カードで学ぶ。未ログインでも使える" },
+      { id: "owner", kind: "person", x: 690, y: 24, w: 250, h: 110, title: "オーナー", tech: "Person",
+        desc: "許可リストのアカウント。利用者の機能に加えて、音声再生を使える" },
+      { id: "sys", kind: "system", x: 330, y: 215, w: 340, h: 140, title: "PDF Exchange English", tech: "Software System",
+        desc: "PDF・テキストから英文を抽出し、日本語訳つきの学習カードとシャドーイング用テキストを作る Web アプリ。ログインすると結果を保存する" },
+      { id: "oxford", kind: "external", x: 30, y: 215, w: 220, h: 120, title: "Oxford Learner's Dictionaries", tech: "External System",
+        desc: "英単語の意味を調べる辞書サイト(別タブで開く)" },
+      { id: "claude", kind: "external", x: 30, y: 450, w: 215, h: 110, title: "Claude API", tech: "External System / Anthropic",
+        desc: "英文を日本語に翻訳する" },
+      { id: "eleven", kind: "external", x: 272, y: 450, w: 215, h: 110, title: "ElevenLabs", tech: "External System",
+        desc: "英文を音声にする(現状オーナーのみ)" },
+      { id: "google", kind: "external", x: 514, y: 450, w: 215, h: 110, title: "Google", tech: "External System / OAuth",
+        desc: "Google アカウントでのログイン" },
+      { id: "neon", kind: "db", x: 756, y: 450, w: 215, h: 110, title: "Neon", tech: "External System / PostgreSQL",
+        desc: "履歴・使用量・ログイン情報を保存する" }
+    ],
+    edges: [
+      { from: "user", to: "sys", label: "英文を抽出・翻訳・保存する\n[HTTPS]", dx: -40 },
+      { from: "owner", to: "sys", label: "音声を再生する\n(オーナーのみ)", dx: 40 },
+      { from: "user", to: "oxford", label: "単語をクリックして\n辞書を開く", dx: -30, dy: 24 },
+      { from: "sys", to: "claude", label: "翻訳を依頼\n[HTTPS / JSON]" },
+      { from: "sys", to: "eleven", label: "音声を生成\n[HTTPS]" },
+      { from: "sys", to: "google", label: "ログイン\n[OAuth 2.0]" },
+      { from: "sys", to: "neon", label: "保存・読み出し\n[SQL]" }
+    ]
+  });
+
+  // =====================================================================
+  // レベル2: コンテナ
+  // =====================================================================
+  render("svg-l2", {
+    width: 1000, height: 700,
+    boundaries: [{ x: 14, y: 160, w: 972, h: 330, label: "PDF Exchange English" }],
+    nodes: [
+      { id: "user", kind: "person", x: 40, y: 20, w: 230, h: 90, title: "利用者", tech: "Person",
+        desc: "(オーナーは音声再生も使える)" },
+      { id: "oxford", kind: "external", x: 730, y: 20, w: 240, h: 90, title: "Oxford Learner's Dictionaries", tech: "External System" },
+      { id: "browser", kind: "container", x: 36, y: 200, w: 270, h: 250, title: "ブラウザ上の UI", tech: "Container: React 19 / Next.js 16 のクライアント部分",
+        desc: "ファイルの選択、翻訳の進み具合、学習カード、音声再生を担う。PDF への書き出し(html2canvas + jsPDF)も、ブラウザの中で行う" },
+      { id: "server", kind: "container", x: 440, y: 200, w: 300, h: 250, title: "Next.js サーバー", tech: "Container: Vercel Functions(Node.js 24)",
+        desc: "履歴ページのサーバー描画と、/api の Route Handler。ログイン確認、利用制限、外部 API の呼び出し、DB へのアクセスを担う。秘密のキーを持つのは、ここだけ" },
+      { id: "migrate", kind: "container", x: 790, y: 270, w: 180, h: 180, title: "マイグレーション", tech: "Container: Node.js スクリプト(scripts/migrate.mjs)",
+        desc: "手元で実行。所有者ロールで db/migrations の SQL を流す" },
+      { id: "google", kind: "external", x: 30, y: 575, w: 200, h: 100, title: "Google", tech: "External System / OAuth" },
+      { id: "claude", kind: "external", x: 252, y: 575, w: 200, h: 100, title: "Claude API", tech: "External System / Anthropic" },
+      { id: "eleven", kind: "external", x: 474, y: 575, w: 200, h: 100, title: "ElevenLabs", tech: "External System" },
+      { id: "neon", kind: "db", x: 710, y: 565, w: 260, h: 120, title: "Neon", tech: "Container: PostgreSQL(マネージド)",
+        desc: "users・sessions・documents・sentences・usage など。RLS あり" }
+    ],
+    edges: [
+      { from: "user", to: "browser", label: "操作する", dx: 40, dy: -16 },
+      { from: "browser", to: "oxford", label: "単語リンクを開く", via: [[170, 150], [850, 150]], dy: -2 },
+      { from: "browser", to: "server", label: "HTTPS / JSON\n/api/extract\n/api/process\n/api/documents\n/api/tts ほか", dy: -18 },
+      { from: "server", to: "google", label: "OAuth", via: [[560, 520], [130, 520]] },
+      { from: "server", to: "claude", label: "翻訳\n[HTTPS]", dx: -10 },
+      { from: "server", to: "eleven", label: "音声\n[HTTPS]" },
+      { from: "server", to: "neon", label: "SQL\n(app_user・RLS)", dx: 16 },
+      { from: "migrate", to: "neon", label: "DDL\n(所有者ロール)", dx: 56 }
+    ]
+  });
+
+  // =====================================================================
+  // レベル3: サーバー側
+  // =====================================================================
+  var R = { x: 22, w: 224, h: 90 }, L = { x: 370, w: 230 }, C = { x: 740, w: 230 };
+  render("svg-l3s", {
+    width: 1000, height: 1010,
+    boundaries: [{ x: 8, y: 8, w: 612, h: 930, label: "Next.js サーバー(Vercel Functions)" }],
+    nodes: [
+      { id: "r_extract", kind: "component", x: R.x, y: 50, w: R.w, h: R.h, title: "/api/extract", tech: "Route Handler", desc: "PDF・TXT から文章を取り出す" },
+      { id: "r_process", kind: "component", x: R.x, y: 175, w: R.w, h: R.h, title: "/api/process", tech: "Route Handler", desc: "split: 本文をチャンクに分ける / translate: 使用量を予約して翻訳" },
+      { id: "r_usage", kind: "component", x: R.x, y: 300, w: R.w, h: R.h, title: "/api/usage", tech: "Route Handler", desc: "残りの使用量と、次のリセット時刻を返す" },
+      { id: "r_docs", kind: "component", x: R.x, y: 425, w: R.w, h: R.h, title: "/api/documents(+ [id])", tech: "Route Handler", desc: "履歴の保存・削除(ログイン必須)" },
+      { id: "r_hist", kind: "component", x: R.x, y: 550, w: R.w, h: R.h, title: "履歴ページ", tech: "Server Component", desc: "/history と /history/[id]。一覧と詳細を DB から読んで描く" },
+      { id: "r_tts", kind: "component", x: R.x, y: 675, w: R.w, h: R.h, title: "/api/tts", tech: "Route Handler", desc: "文を音声にする(オーナーのみ)" },
+      { id: "r_auth", kind: "component", x: R.x, y: 800, w: R.w, h: R.h, title: "/api/auth/[...all]", tech: "Route Handler", desc: "ログイン・ログアウト・セッション(Better Auth)" },
+
+      { id: "l_pdf", kind: "component", x: L.x, y: 50, w: L.w, h: 90, title: "pdf-parser", tech: "pdf-parse / tesseract.js", desc: "PDF から文字を取り出す。取れなければ OCR" },
+      { id: "l_llm", kind: "component", x: L.x, y: 175, w: L.w, h: 90, title: "llm", tech: "@anthropic-ai/sdk", desc: "整形・分割と、Claude の呼び出し(Tool Use)" },
+      { id: "l_usage", kind: "component", x: L.x, y: 300, w: L.w, h: 110, title: "usage / usage-limits / client-ip", tech: "TypeScript", desc: "使用量の予約・返金・残量。上限は環境変数から。IP は鍵つきハッシュにする" },
+      { id: "l_docs", kind: "component", x: L.x, y: 445, w: L.w, h: 90, title: "documents / db", tech: "@neondatabase/serverless", desc: "文書と文の保存・一覧・取得・削除(ORM なしの SQL)" },
+      { id: "l_access", kind: "component", x: L.x, y: 660, w: L.w, h: 70, title: "access", tech: "TypeScript", desc: "許可リストで、オーナーか判定する" },
+      { id: "l_eleven", kind: "component", x: L.x, y: 745, w: L.w, h: 70, title: "elevenlabs", tech: "fetch", desc: "音声を作り、data URL で返す" },
+      { id: "l_auth", kind: "component", x: L.x, y: 830, w: L.w, h: 80, title: "auth", tech: "Better Auth", desc: "ログインの設定とセッション確認" },
+
+      { id: "x_claude", kind: "external", x: C.x, y: 175, w: C.w, h: 90, title: "Claude API", tech: "External System" },
+      { id: "x_neon", kind: "db", x: C.x, y: 345, w: C.w, h: 120, title: "Neon", tech: "PostgreSQL", desc: "app_user ロールで接続" },
+      { id: "x_eleven", kind: "external", x: C.x, y: 745, w: C.w, h: 70, title: "ElevenLabs", tech: "External System" },
+      { id: "x_google", kind: "external", x: C.x, y: 830, w: C.w, h: 80, title: "Google", tech: "External System / OAuth" }
+    ],
+    edges: [
+      { from: "r_extract", to: "l_pdf", label: "抽出" },
+      { from: "r_process", to: "l_llm", label: "分割・翻訳" },
+      { from: "r_process", to: "l_usage", label: "予約・返金", dy: 6 },
+      { from: "r_usage", to: "l_usage", label: "残量を取得" },
+      { from: "r_docs", to: "l_docs", label: "保存・削除" },
+      { from: "r_hist", to: "l_docs", label: "取得", dy: 10 },
+      { from: "r_tts", to: "l_access", label: "許可を確認" },
+      { from: "r_tts", to: "l_eleven", label: "音声を生成" },
+      { from: "r_auth", to: "l_auth", label: "認証" },
+      { from: "l_llm", to: "x_claude", label: "Tool Use\n[HTTPS]" },
+      { from: "l_usage", to: "x_neon", label: "SQL" },
+      { from: "l_docs", to: "x_neon", label: "SQL" },
+      { from: "l_auth", to: "x_neon", label: "SQL", via: [[650, 870], [650, 430]], dx: 0 },
+      { from: "l_auth", to: "x_google", label: "OAuth" },
+      { from: "l_eleven", to: "x_eleven", label: "HTTPS" }
+    ],
+    notes: [
+      { x: 24, y: 962, text: "※ /api/process(translate)・/api/documents・/api/usage・/api/tts・履歴ページは、auth の getSession でログイン状態を確認する(線は省略)。" },
+      { x: 24, y: 982, text: "※ 未ログインは、/api/process と /api/usage では「未ログイン枠」として扱う。/api/documents と /api/tts は 401、オーナー以外の /api/tts は 403。" }
+    ]
+  });
+
+  // =====================================================================
+  // レベル3: ブラウザ側
+  // =====================================================================
+  render("svg-l3b", {
+    width: 1000, height: 690,
+    nodes: [
+      { id: "server", kind: "container", x: 30, y: 24, w: 940, h: 64, title: "Next.js サーバー(/api/*)", tech: "Container: 前の図の入口(Route Handler)" },
+
+      { id: "auth", kind: "component", x: 30, y: 190, w: 230, h: 110, title: "Header / AuthButton", tech: "React クライアントコンポーネント", desc: "Google でのログイン・ログアウト(better-auth/react)" },
+      { id: "page", kind: "component", x: 385, y: 190, w: 250, h: 120, title: "ホーム画面(app/page.tsx)", tech: "React クライアントコンポーネント", desc: "抽出 → 分割 → チャンクごとに翻訳 → 保存、の流れを進める。進み具合を表示する" },
+      { id: "usage", kind: "component", x: 750, y: 190, w: 220, h: 120, title: "UsageProvider / UsageNotice", tech: "React コンテキスト", desc: "残りの使用量を取得して持ち、画面に知らせる。ログイン状態が変わると取り直す" },
+
+      { id: "upload", kind: "component", x: 30, y: 370, w: 230, h: 90, title: "FileUploader", tech: "React クライアントコンポーネント", desc: "PDF・テキストのファイルを受け取る" },
+      { id: "list", kind: "component", x: 385, y: 370, w: 250, h: 100, title: "SentenceList", tech: "React クライアントコンポーネント", desc: "翻訳結果の一覧。目次、コピー、PDF 保存" },
+      { id: "shadow", kind: "component", x: 750, y: 370, w: 220, h: 100, title: "ShadowingSheet", tech: "React クライアントコンポーネント", desc: "シャドーイング用テキスト。行にまとめて表示する" },
+
+      { id: "click", kind: "component", x: 30, y: 560, w: 230, h: 100, title: "ClickableEnglishText", tech: "React クライアントコンポーネント", desc: "英単語のクリックで、Oxford Learner's Dictionaries を別タブで開く" },
+      { id: "card", kind: "component", x: 385, y: 560, w: 250, h: 110, title: "SentenceCard", tech: "React クライアントコンポーネント", desc: "1 文の学習カード。日本語訳と音声再生ボタン。再生した音声は、この画面の状態にだけ持つ" },
+      { id: "pdf", kind: "component", x: 750, y: 560, w: 220, h: 100, title: "DownloadPdfButton", tech: "html2canvas + jsPDF", desc: "画面の内容を、ブラウザの中で PDF にして保存する" }
+    ],
+    edges: [
+      { from: "auth", to: "server", label: "/api/auth/*" },
+      { from: "page", to: "server", label: "/api/extract・/api/process・/api/documents" },
+      { from: "usage", to: "server", label: "/api/usage" },
+      { from: "card", to: "server", label: "/api/tts", via: [[330, 600], [330, 120]], dx: 0 },
+      { from: "page", to: "upload" },
+      { from: "page", to: "list", label: "翻訳結果を渡す" },
+      { from: "page", to: "shadow", label: "翻訳結果を渡す" },
+      { from: "page", to: "usage", label: "残量を読む" },
+      { from: "list", to: "card", label: "1 文ずつ" },
+      { from: "list", to: "pdf", label: "PDF 保存" },
+      { from: "shadow", to: "pdf", label: "PDF 保存" },
+      { from: "card", to: "click", label: "単語を包む" }
+    ]
+  });
+})();
+</script>
+</body>
+</html>
