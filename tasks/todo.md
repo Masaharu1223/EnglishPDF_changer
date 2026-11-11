@@ -248,3 +248,45 @@
 ## スコープ外
 - 再ログイン後に自動で保存し直す機能
 - ヘッダーの表示を期限ちょうどに切り替える仕組み
+
+# 翻訳1件ごとのチケット(Issue #54)
+
+## 方針(Issue #54 の仕様。architect のレビュー済み)
+- 最初にテキストを受け取るリクエスト(PDF/TXT: `/api/extract`、貼り付け: `/api/process` の split)でセッションが有効なら、チケットを発行する。以降の翻訳と保存は、チケットでログイン者として扱う。
+- PR を2つに分ける。PR 1 は DB とサーバー側で、入れても今の動きは変わらない。PR 2 で画面を切り替える。
+
+## PR 1: DB・サーバー側(ブランチ `feature/translation-ticket-server`)
+- [x] 1. worktree 作成、`.env.local` のコピー、`npm ci`
+- [x] 2. マイグレーション `db/migrations/0005_translation_tickets.sql`(テーブル・索引・grant、RLS を付けない理由のコメント)。`scripts/migrate.mjs` は全ファイルを流し直すので使わず、このファイルだけを `psql` で適用する
+  - [x] 2a. テスト用ブランチ(`DATABASE_URL_TEST_OWNER`)に適用
+  - [x] 2b. 本番への適用は、PR 1 のマージ前に、ユーザーの確認を取ってから行う
+- [x] 3. `src/lib/translation-ticket.ts`: トークンの生成・ハッシュ、budget の計算、発行(同じユーザーの期限切れの行の掃除を含む)、翻訳での使用、返金、保存での使用済み化、無効化
+- [x] 4. `src/lib/usage.ts`: `reserveUsage` / `refundUsage` を、外から渡されたトランザクション(client)の中でも使えるようにする
+- [x] 5. 発行の共通関数 `startTranslation(text, sessionUser)`: cleanText → 分割 → budget → 本文の長さの確認(200,000字)→ 持ち主の残量の確認 → 発行 → `{ chunks, ticket, usage }`
+- [x] 6. `/api/extract`: リクエストの最初(OCR の前)に `getSession`。`withTicket: true` が送られ、かつログイン中なら、`startTranslation` の結果をレスポンスに足す。未ログインは今のまま(DB に触れない)
+- [x] 7. `/api/process` の split: 6 と同じ
+- [x] 8. `/api/process` の translate: `X-Translation-Ticket` があれば、チケットで判定する(検証・`used_chars` の加算・使用量の予約を1トランザクション、チャンクのハッシュの照合)。無効なら 401 + `reason: "ticket_invalid"`(未ログインに戻さない)。429(personal / pool)ならチケットを無効化。Claude の失敗時は、チケット側も返金
+- [x] 9. `/api/documents`: `X-Translation-Ticket` があれば、1トランザクションでチケットを使用済みにして(`raw_text_hash` を照合)保存する。`saveDocument` を client を受け取れる形に分ける。sentences の件数と1文の長さに上限を付ける
+- [x] 10. テスト: 単体(budget・ハッシュ)、API(extract / process / documents のチケットの経路と、チケットのない経路が変わらないこと)、DB 統合(テスト用ブランチで、発行・使用・期限切れ・使用済み・budget 超過・チャンクの不一致・返金・保存)
+- [x] 11. tsc・lint・テスト(DB 統合を含む)・ビルド、`code-reviewer` のレビュー(承認。中の指摘のうち、発行数の上限は対応、再試行の余裕は PR 2 へ)
+- [ ] 12. PR → 本番にマイグレーション(2b)→ マージ(ユーザー)
+
+## PR 2: 画面側(PR 1 のマージ後に、別のブランチで)
+- [ ] 1. `processText`: `withTicket: true` を送る。PDF/TXT は extract のレスポンスのチャンクを使う(split を呼ばない)。チケットを変数に持ち、translate と保存のヘッダーに付ける
+- [ ] 2. 残量の事前確認は、チケットがあれば発行のレスポンスの値を使う(`GET /api/usage` を呼ばない)
+- [ ] 3. 保存するかの判定を、`session?.user` から「チケットを持っているか」に変える
+- [ ] 4. `ticket_invalid` を受け取ったら中断し、理由を表示する
+- [ ] 4a. `/api/documents` の 401 は、`reason` が `ticket_invalid` かどうかで表示を分ける(今は 401 をすべて「セッション切れ」と表示している)
+- [ ] 4b. 発行の応答で `ticket` と `usage` が `null` のとき(DB の失敗)は、今までの流れ(`GET /api/usage`、セッションでの保存)で続ける
+- [ ] 4c. 失敗したチャンクを再試行するかを決める。再試行するなら、`budget_chars` に余裕を持たせる(PR 1 のレビューの指摘)
+- [ ] 5. テスト(`home-page.test.tsx`)
+- [ ] 6. ローカルの実機確認: セッションの期限を一時的に3分にし、期限の直前に始めて、途中で切れても保存まで終わること(PDF と貼り付けの両方)
+- [ ] 7. tsc・lint・テスト・ビルド、`code-reviewer`、PR → マージ(ユーザー)→ 本番確認
+
+## 分かった制約(PR 1 の実装中)
+- Vercel は、リクエストの本文を受け取り終えてから関数を動かす。大きな PDF のアップロードが遅いと、ログインの確認は「アップロードが終わった時点」になる。アップロード中にセッションが切れると、チケットは出ない(未ログインの扱い)。アップロードより前に確認するには、別の往復が要るため、今回は対応しない。
+
+## 決めたこと(要確認)
+- PR 1 では、発行は `withTicket: true` が送られたときだけにする。PR 1 を入れても、今の画面は送らないので、チケットは作られず、動きが変わらない。
+- 無効なチケットは、理由にかかわらず 401 + `reason: "ticket_invalid"` で返す(画面の扱いを1つにするため)。
+- `/api/documents` の上限は、件数 10,000件、原文 2,000字、訳文 4,000字とする(1チャンクが最大1,500字のため)。
