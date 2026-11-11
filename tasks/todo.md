@@ -259,7 +259,7 @@
 - [x] 1. worktree 作成、`.env.local` のコピー、`npm ci`
 - [x] 2. マイグレーション `db/migrations/0005_translation_tickets.sql`(テーブル・索引・grant、RLS を付けない理由のコメント)。`scripts/migrate.mjs` は全ファイルを流し直すので使わず、このファイルだけを `psql` で適用する
   - [x] 2a. テスト用ブランチ(`DATABASE_URL_TEST_OWNER`)に適用
-  - [ ] 2b. 本番への適用は、PR 1 のマージ前に、ユーザーの確認を取ってから行う
+  - [x] 2b. 本番への適用は、PR 1 のマージ前に、ユーザーの確認を取ってから行う
 - [x] 3. `src/lib/translation-ticket.ts`: トークンの生成・ハッシュ、budget の計算、発行(同じユーザーの期限切れの行の掃除を含む)、翻訳での使用、返金、保存での使用済み化、無効化
 - [x] 4. `src/lib/usage.ts`: `reserveUsage` / `refundUsage` を、外から渡されたトランザクション(client)の中でも使えるようにする
 - [x] 5. 発行の共通関数 `startTranslation(text, sessionUser)`: cleanText → 分割 → budget → 本文の長さの確認(200,000字)→ 持ち主の残量の確認 → 発行 → `{ chunks, ticket, usage }`
