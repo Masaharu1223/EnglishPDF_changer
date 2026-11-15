@@ -1,0 +1,537 @@
+<title>PDF Exchange English アーキテクチャ</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 1カラムの技術文書。C4の4レベルを上から順に、図は横スクロール可能な枠に収める */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --fg: #1c2330;
+  --muted: #5a6474;
+  --line: #4a5568;
+  --rule: #d9dee6;
+  --person: #0b4884;
+  --system: #1168bd;
+  --container: #3a86d1;
+  --component: #6ba7e0;
+  --ext: #7d8794;
+  --on-fill: #ffffff;
+  --boundary: #6b7686;
+  --accent: #1168bd;
+  --code-bg: #eef1f5;
+  --font-body: "IBM Plex Sans JP", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d; --surface: #1a2029; --fg: #e3e8ef; --muted: #9aa5b4; --line: #a9b4c3; --rule: #2c3542;
+    --person: #0e4a85; --system: #1a62ad; --container: #2f74ba; --component: #3d7fbd; --ext: #5b6573;
+    --on-fill: #ffffff; --boundary: #8a96a6; --accent: #6eb0f0; --code-bg: #222a35; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161d; --surface: #1a2029; --fg: #e3e8ef; --muted: #9aa5b4; --line: #a9b4c3; --rule: #2c3542;
+  --person: #0e4a85; --system: #1a62ad; --container: #2f74ba; --component: #3d7fbd; --ext: #5b6573;
+  --on-fill: #ffffff; --boundary: #8a96a6; --accent: #6eb0f0; --code-bg: #222a35; color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.75; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-block: 40px 80px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 56px; }
+header { display: flex; flex-direction: column; gap: 10px; }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font-size: clamp(26px, 4vw, 36px); line-height: 1.3; margin: 0; text-wrap: balance; font-weight: 700; }
+h2 { font-size: 22px; margin: 0; text-wrap: balance; display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+h2 .lv { font-family: var(--font-mono); font-size: 13px; font-weight: 500; color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; padding: 0 8px; }
+h3 { font-size: 16px; margin: 0; }
+p { margin: 0; max-width: 72ch; }
+.lead { color: var(--muted); max-width: 72ch; }
+section { display: flex; flex-direction: column; gap: 18px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; color: var(--muted); }
+.meta code { font-family: var(--font-mono); }
+nav.toc { display: flex; flex-wrap: wrap; gap: 8px; }
+nav.toc a { font-size: 13px; color: var(--fg); text-decoration: none; border: 1px solid var(--rule); background: var(--surface); padding: 4px 12px; border-radius: 999px; }
+nav.toc a:hover, nav.toc a:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+.diagram { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; overflow-x: auto; padding: 12px; }
+.diagram svg { display: block; min-width: 760px; width: 100%; height: auto; }
+.diagram pre.mermaid { margin: 0; min-width: 640px; background: transparent; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+.legend i.dash { border: 1.5px dashed var(--boundary); }
+.table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; min-width: 640px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 14px; border-bottom: 1px solid var(--rule); }
+th { font-size: 12px; letter-spacing: .04em; color: var(--muted); font-weight: 600; background: var(--code-bg); }
+tr:last-child td { border-bottom: none; }
+code, .mono { font-family: var(--font-mono); font-size: .9em; }
+td code { background: var(--code-bg); padding: 1px 5px; border-radius: 3px; white-space: nowrap; }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.note { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0; font-size: 14px; }
+.note h3 { font-size: 14px; }
+.note p { color: var(--muted); }
+.status { font-size: 12px; font-family: var(--font-mono); color: var(--accent); }
+footer { font-size: 12px; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 16px; }
+/* SVG */
+.c4-box rect, .c4-box path.shape, .c4-box circle { stroke: none; }
+.c4-title { font-weight: 700; font-size: 14px; fill: var(--on-fill); }
+.c4-tech { font-size: 11px; fill: var(--on-fill); opacity: .85; font-family: var(--font-mono); }
+.c4-desc { font-size: 12px; fill: var(--on-fill); }
+.c4-edge { stroke: var(--line); stroke-width: 1.4; fill: none; stroke-dasharray: 6 4; }
+.c4-arrow { fill: var(--line); }
+.c4-label { font-size: 11.5px; fill: var(--fg); }
+.c4-label-tech { font-size: 10.5px; fill: var(--muted); font-family: var(--font-mono); }
+.c4-label-bg { fill: var(--surface); }
+.c4-boundary { fill: none; stroke: var(--boundary); stroke-width: 1.5; stroke-dasharray: 8 5; }
+.c4-boundary-label { font-size: 13px; font-weight: 700; fill: var(--fg); }
+.c4-boundary-tech { font-size: 11px; fill: var(--muted); font-family: var(--font-mono); }
+svg text { font-family: var(--font-body); }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">C4 Model · Masaharu1223/EnglishPDF_changer</div>
+    <h1>PDF Exchange English のソフトウェアアーキテクチャ</h1>
+    <p class="lead">英文PDF・テキストから文を取り出し、Claude で日本語訳を付けて学習カード・シャドーイング用テキスト・音声にする Next.js アプリの構成を、C4モデルの4段階で示します。図はすべてソースコード（<code>src/</code>、<code>db/migrations/</code>、<code>scripts/</code>）から読み取ったものです。</p>
+    <div class="meta">
+      <span>基準コミット <code>149fece</code>（Issue #54 PR 1 まで）</span>
+      <span>作成日 2026-11-15</span>
+    </div>
+    <nav class="toc" aria-label="目次">
+      <a href="#context">1. システムコンテキスト</a>
+      <a href="#container">2. コンテナ</a>
+      <a href="#component">3. コンポーネント</a>
+      <a href="#dynamic">動的図：翻訳の流れ</a>
+      <a href="#code">4. コード（データモデル）</a>
+      <a href="#deploy">デプロイ・品質</a>
+    </nav>
+  </header>
+
+  <section id="context">
+    <h2><span class="lv">Level 1</span>システムコンテキスト図</h2>
+    <p>誰がこのシステムを使い、どの外部サービスに頼っているかを示します。翻訳と音声は有料APIのため、システム側で1日の利用量を制限しています。</p>
+    <div class="diagram"><svg id="d-context" viewBox="0 0 1000 640" role="img" aria-label="システムコンテキスト図"></svg></div>
+    <div class="legend" id="legend-1"></div>
+  </section>
+
+  <section id="container">
+    <h2><span class="lv">Level 2</span>コンテナ図</h2>
+    <p>システムの中を、別々に動く単位に分けたものです。ブラウザ上の画面と Vercel 上のサーバーは同じ Next.js プロジェクトですが、実行場所が違うため別のコンテナとして扱います。DB には権限を絞った <code>app_user</code> ロールで接続し、所有者ロールはマイグレーションだけで使います。</p>
+    <div class="diagram"><svg id="d-container" viewBox="0 0 1120 870" role="img" aria-label="コンテナ図"></svg></div>
+    <div class="legend" id="legend-2"></div>
+  </section>
+
+  <section id="component">
+    <h2><span class="lv">Level 3</span>コンポーネント図：アプリサーバー</h2>
+    <p>上段が入口（Route Handler と Server Component）、中段が <code>src/lib/</code> の処理、下段が接続部品です。<code>auth.ts</code> のセッション確認は、ほぼすべての入口から呼ばれるため矢印を省いています。</p>
+    <div class="diagram"><svg id="d-component" viewBox="0 0 1220 920" role="img" aria-label="アプリサーバーのコンポーネント図"></svg></div>
+
+    <h3>入口ごとの処理</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>入口</th><th>受け付けるもの</th><th>使うコンポーネント</th><th>認証・制限</th></tr></thead>
+      <tbody>
+        <tr><td><code>POST /api/extract</code></td><td>PDF/TXT（base64）</td><td>pdf-parser、（<code>withTicket</code> 時）translation-ticket-response</td><td>未ログイン可。チケット発行はログイン必須</td></tr>
+        <tr><td><code>POST /api/process</code></td><td><code>action: "split"</code> / <code>"translate"</code></td><td>llm、usage、usage-limits、translation-ticket</td><td>translate の前に使用量を予約。上限超は 429</td></tr>
+        <tr><td><code>GET /api/usage</code></td><td>なし</td><td>usage、usage-info、access</td><td>未ログインは IP（HMAC）単位</td></tr>
+        <tr><td><code>POST /api/documents</code></td><td>タイトル・本文・文の配列</td><td>documents、translation-ticket</td><td>ログイン必須（またはチケット）。RLS で本人の行だけ</td></tr>
+        <tr><td><code>DELETE /api/documents/[id]</code></td><td>文書ID</td><td>documents</td><td>ログイン必須。本人の文書だけ</td></tr>
+        <tr><td><code>/history</code>、<code>/history/[id]</code></td><td>画面（Server Component）</td><td>documents、format</td><td>ログイン必須</td></tr>
+        <tr><td><code>POST /api/tts</code></td><td>英文（5,000文字まで）</td><td>access、elevenlabs</td><td>ログイン＋許可リスト（試験導入）</td></tr>
+        <tr><td><code>/api/auth/[...all]</code></td><td>Better Auth の各リクエスト</td><td>auth</td><td>Google OAuth。セッションは2時間で失効</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>コンポーネント図：Webアプリ（ブラウザ）</h3>
+    <p>画面は Client Component の組み合わせです。共通の状態は <code>UsageProvider</code>（今日の残り文字数）と Better Auth の <code>useSession</code> の2つで、翻訳結果はリロード対策として <code>sessionStorage</code> に保存します。</p>
+    <div class="diagram"><svg id="d-client" viewBox="0 0 1120 560" role="img" aria-label="ブラウザ側のコンポーネント図"></svg></div>
+  </section>
+
+  <section id="dynamic">
+    <h2><span class="lv">Dynamic</span>動的図：PDFから教材を作って保存するまで</h2>
+    <p>トップページ（<code>src/app/page.tsx</code>）の現在の処理順です。翻訳はチャンクごとに1リクエストずつ送り、そのたびにサーバーが使用量を予約します。</p>
+    <div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+  autonumber
+  actor U as 学習者
+  participant B as ブラウザ<br/>page.tsx
+  participant S as アプリサーバー
+  participant D as Neon Postgres
+  participant C as Claude API
+  U->>B: PDF / TXT を選ぶ
+  B->>S: POST /api/extract（base64）
+  S->>S: pdf-parse で抽出（文字がなければ tesseract.js でOCR）
+  S-->>B: 本文テキスト
+  B->>S: POST /api/process {action: "split"}
+  S-->>B: チャンクの配列（1件 約1,500文字）
+  loop チャンクごと（進み具合を％表示）
+    B->>S: POST /api/process {action: "translate"}
+    S->>D: usage に文字数を予約（行ロック・上限を確認）
+    alt 上限を超える
+      S-->>B: 429（残りと再開時刻）
+    else 予約できた
+      S->>C: messages.create（tool_choice: record_translations）
+      C-->>S: 原文と訳の組
+      Note over S,D: Claude から応答が返る前の失敗なら予約を返金
+      S-->>B: 文と訳
+    end
+  end
+  B->>B: sessionStorage に保存
+  opt ログイン中で、全チャンクが成功
+    B->>S: POST /api/documents
+    S->>D: documents と sentences を1トランザクションで保存（RLS）
+  end
+</pre>
+    </div>
+    <div class="notes">
+      <div class="note"><h3>翻訳チケット（Issue #54）</h3><span class="status">サーバー側のみ実装済み</span><p>最初に本文を受け取ったときに、ログイン中なら翻訳1件ぶんのチケットを発行します。チケットがあれば、翻訳中にセッション（2時間）が切れても、発行時のユーザーとして翻訳・保存できます。<code>/api/extract</code> と <code>/api/process</code> の <code>withTicket</code>、<code>x-translation-ticket</code> ヘッダーは用意済みですが、<code>page.tsx</code> からはまだ送っていません。</p></div>
+      <div class="note"><h3>使用量の予約</h3><p>Claude を呼ぶ前に <code>usage</code> テーブルへ <code>INSERT … ON CONFLICT DO UPDATE … WHERE</code> で予約し、個人の枠と全体の枠の両方を同時に確認します。ロック待ちが <code>USAGE_LOCK_TIMEOUT_MS</code> を超えたら 429（<code>reason: busy</code>）で断ります。</p></div>
+    </div>
+  </section>
+
+  <section id="code">
+    <h2><span class="lv">Level 4</span>コード：データモデル</h2>
+    <p>C4のコードレベルとして、<code>db/migrations/0001〜0005</code> のテーブル構成を示します。ORM は使わず、<code>src/lib/</code> から SQL を直接書いています。</p>
+    <div class="diagram">
+<pre class="mermaid">
+erDiagram
+  users ||--o{ sessions : "ログイン"
+  users ||--o{ accounts : "Google連携"
+  users ||--o{ documents : "保存した教材"
+  documents ||--o{ sentences : "文と訳"
+  users ||--o{ translation_tickets : "翻訳チケット"
+  users {
+    text id PK
+    text email UK
+    text name
+  }
+  sessions {
+    text id PK
+    text token UK
+    text userId FK
+    timestamptz expiresAt
+  }
+  accounts {
+    text id PK
+    text userId FK
+    text providerId
+  }
+  documents {
+    bigint id PK
+    text user_id FK
+    text title
+    text source_type "pdf, txt, paste"
+    text raw_text "200,000文字まで"
+  }
+  sentences {
+    bigint id PK
+    bigint document_id FK
+    text user_id FK
+    int position
+    text original
+    text translation
+  }
+  translation_tickets {
+    bigint id PK
+    text token_hash UK "SHA-256のみ保存"
+    text user_id FK
+    int budget_chars
+    int used_chars
+    text_array chunk_hashes
+    timestamptz expires_at "24時間"
+    timestamptz consumed_at
+  }
+  usage {
+    text subject_key PK "u:, ip:, anon:*, auth:*"
+    date day PK "UTC"
+    text kind PK
+    int amount
+  }
+  verifications {
+    text id PK
+    text identifier
+    timestamptz expiresAt
+  }
+</pre>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>テーブル</th><th>app_user の権限</th><th>行レベルセキュリティ</th><th>書き込むコンポーネント</th></tr></thead>
+      <tbody>
+        <tr><td><code>users</code> ほか認証4表</td><td>SELECT / INSERT / UPDATE / DELETE</td><td>有効（app_user には全行）</td><td>auth.ts（Better Auth）</td></tr>
+        <tr><td><code>documents</code></td><td>SELECT / INSERT / DELETE</td><td>有効。<code>app.user_id</code> と一致する行だけ</td><td>documents.ts</td></tr>
+        <tr><td><code>sentences</code></td><td>SELECT / INSERT</td><td>有効。<code>app.user_id</code> と一致する行だけ</td><td>documents.ts</td></tr>
+        <tr><td><code>usage</code></td><td>SELECT / INSERT / UPDATE</td><td>なし（主キーで検索するため）。権限で制限</td><td>usage.ts</td></tr>
+        <tr><td><code>translation_tickets</code></td><td>SELECT / INSERT / UPDATE / DELETE</td><td>なし（token_hash で検索するため）。権限で制限</td><td>translation-ticket.ts</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="deploy">
+    <h2><span class="lv">補足</span>デプロイと品質管理</h2>
+    <div class="notes">
+      <div class="note"><h3>実行環境</h3><p>Vercel（Node 24）。画面とAPIは同じ Next.js 16 アプリで、API と Server Component は Vercel Functions で動きます。環境変数を変えたら Redeploy が必要です。</p></div>
+      <div class="note"><h3>データベース</h3><p>Neon（サーバーレス Postgres）。<code>@neondatabase/serverless</code> の Pool を、認証用（auth.ts）とアプリ用（db.ts）で1つずつ持ちます。どちらも <code>DATABASE_URL_APP</code> を使います。</p></div>
+      <div class="note"><h3>CI</h3><p>GitHub Actions が PR ごとに 型チェック → lint → テスト（単体・API・UI）→ ビルド → <code>npm audit --omit=dev</code> を順に実行します。DB 統合テストはローカルだけで動かします。</p></div>
+      <div class="note"><h3>テスト</h3><p>Vitest 5 と Testing Library。<code>src/__tests__/</code> の下を unit / api / ui / integration に分けています。</p></div>
+    </div>
+  </section>
+
+  <footer>ソースコードから手作業で作成した図です。C4モデルの表記：人物・ソフトウェアシステム・コンテナ・コンポーネントは塗りつぶしの箱、外部システムは灰色、境界は破線で示しています。</footer>
+</div>
+
+<script>
+(function () {
+  const NS = "http://www.w3.org/2000/svg";
+  const FILL = { person: "var(--person)", system: "var(--system)", container: "var(--container)", component: "var(--component)", ext: "var(--ext)" };
+  const KIND_LABEL = { person: "人物", system: "ソフトウェアシステム", container: "コンテナ", component: "コンポーネント", ext: "外部システム" };
+
+  function el(tag, attrs, parent) {
+    const n = document.createElementNS(NS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(n);
+    return n;
+  }
+  function textWidth(s, fs) {
+    let w = 0;
+    for (const ch of s) w += ch.charCodeAt(0) > 0x2e7f ? fs : fs * 0.58;
+    return w;
+  }
+  function wrap(s, maxW, fs) {
+    const tokens = s.match(/[A-Za-z0-9_.\/\-\[\]@'*]+|\s+|./gu) || [];
+    const lines = []; let cur = "";
+    const push = () => { if (cur.trim()) lines.push(cur.trim()); cur = ""; };
+    for (const tok of tokens) {
+      if (textWidth(cur + tok, fs) <= maxW) { cur += tok; continue; }
+      if (/^\s+$/.test(tok)) { push(); continue; }
+      if (textWidth(tok, fs) <= maxW) { push(); cur = tok; continue; }
+      for (const ch of tok) {
+        if (textWidth(cur + ch, fs) > maxW && cur) push();
+        cur += ch;
+      }
+    }
+    push();
+    return lines;
+  }
+  function addArrowDef(svg, id) {
+    const defs = el("defs", {}, svg);
+    const m = el("marker", { id, viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "8", markerHeight: "8", orient: "auto-start-reverse" }, defs);
+    el("path", { d: "M0,0 L10,5 L0,10 z", class: "c4-arrow" }, m);
+  }
+  function box(svg, b) {
+    const g = el("g", { class: "c4-box" }, svg);
+    const fill = FILL[b.kind];
+    let top = b.y, h = b.h;
+    if (b.kind === "person") {
+      el("circle", { cx: b.x + b.w / 2, cy: b.y + 17, r: 17, fill }, g);
+      top = b.y + 30; h = b.h - 30;
+      el("rect", { x: b.x, y: top, width: b.w, height: h, rx: 18, fill }, g);
+    } else if (b.db) {
+      const ry = 12;
+      el("path", { class: "shape", fill, d: `M${b.x},${b.y + ry} a${b.w / 2},${ry} 0 0,1 ${b.w},0 v${b.h - 2 * ry} a${b.w / 2},${ry} 0 0,1 ${-b.w},0 z` }, g);
+      el("path", { d: `M${b.x},${b.y + ry} a${b.w / 2},${ry} 0 0,0 ${b.w},0`, fill: "none", stroke: "var(--on-fill)", "stroke-opacity": ".55", "stroke-width": "1.2" }, g);
+      top = b.y + ry * 2; h = b.h - ry * 2;
+    } else {
+      el("rect", { x: b.x, y: b.y, width: b.w, height: b.h, rx: 6, fill }, g);
+    }
+    const cx = b.x + b.w / 2, pad = 12;
+    const titleLines = wrap(b.title, b.w - pad * 2, 14);
+    const tech = "[" + (b.label || KIND_LABEL[b.kind]) + (b.tech ? ": " + b.tech : "") + "]";
+    const techLines = wrap(tech, b.w - pad * 2, 11);
+    const descLines = b.desc ? wrap(b.desc, b.w - pad * 2, 12) : [];
+    const total = titleLines.length * 18 + techLines.length * 15 + (descLines.length ? 6 + descLines.length * 16 : 0);
+    let y = top + Math.max(8, (h - total) / 2) + 13;
+    for (const l of titleLines) { const t = el("text", { x: cx, y, "text-anchor": "middle", class: "c4-title" }, g); t.textContent = l; y += 18; }
+    for (const l of techLines) { const t = el("text", { x: cx, y: y - 2, "text-anchor": "middle", class: "c4-tech" }, g); t.textContent = l; y += 15; }
+    if (descLines.length) y += 6;
+    for (const l of descLines) { const t = el("text", { x: cx, y, "text-anchor": "middle", class: "c4-desc" }, g); t.textContent = l; y += 16; }
+  }
+  function boundary(svg, b) {
+    el("rect", { x: b.x, y: b.y, width: b.w, height: b.h, rx: 8, class: "c4-boundary" }, svg);
+    const y0 = b.labelTop ? b.y + 22 : b.y + b.h - 26;
+    const t = el("text", { x: b.x + 14, y: y0, class: "c4-boundary-label" }, svg); t.textContent = b.title;
+    const t2 = el("text", { x: b.x + 14, y: y0 + 16, class: "c4-boundary-tech" }, svg); t2.textContent = "[" + b.tech + "]";
+  }
+  function edge(svg, e, markerId, labelLayer) {
+    el("polyline", { points: e.pts.map(p => p.join(",")).join(" "), class: "c4-edge", "marker-end": `url(#${markerId})` }, svg);
+    if (!e.label) return;
+    const [lx, ly] = e.at;
+    const lines = [{ s: e.label, cls: "c4-label", fs: 11.5 }];
+    if (e.tech) lines.push({ s: "[" + e.tech + "]", cls: "c4-label-tech", fs: 10.5 });
+    const w = Math.max(...lines.map(l => textWidth(l.s, l.fs))) + 10;
+    const h = lines.length * 15 + 4;
+    el("rect", { x: lx - w / 2, y: ly - h / 2, width: w, height: h, rx: 3, class: "c4-label-bg" }, labelLayer);
+    lines.forEach((l, i) => {
+      const t = el("text", { x: lx, y: ly - h / 2 + 13 + i * 15, "text-anchor": "middle", class: l.cls }, labelLayer);
+      t.textContent = l.s;
+    });
+  }
+  function render(id, spec) {
+    const svg = document.getElementById(id);
+    const mid = id + "-arrow";
+    addArrowDef(svg, mid);
+    (spec.boundaries || []).forEach(b => boundary(svg, b));
+    const edgeLayer = el("g", {}, svg);
+    (spec.boxes || []).forEach(b => box(svg, b));
+    const labelLayer = el("g", {}, svg);
+    (spec.edges || []).forEach(e => edge(edgeLayer, e, mid, labelLayer));
+    svg.appendChild(labelLayer);
+  }
+  function legend(id, kinds) {
+    const host = document.getElementById(id);
+    kinds.forEach(k => {
+      const s = document.createElement("span");
+      const i = document.createElement("i");
+      if (k === "boundary") i.className = "dash"; else i.style.background = FILL[k];
+      s.append(i, k === "boundary" ? "境界" : KIND_LABEL[k]);
+      host.appendChild(s);
+    });
+    const s = document.createElement("span"); s.textContent = "破線の矢印＝呼び出し・利用"; host.appendChild(s);
+  }
+
+  // ---------- Level 1: System Context ----------
+  render("d-context", {
+    boxes: [
+      { kind: "person", x: 60, y: 30, w: 230, h: 130, title: "学習者（未ログイン）", desc: "PDFや英文を読み込み、訳付きカードを作る" },
+      { kind: "person", x: 385, y: 30, w: 230, h: 130, title: "学習者（ログイン済み）", desc: "Googleでログインし、作った教材を履歴に残す" },
+      { kind: "person", x: 710, y: 30, w: 230, h: 130, title: "運営者（許可リスト）", desc: "開発・運用する本人。音声読み上げ（試験導入）も使う" },
+      { kind: "system", x: 310, y: 265, w: 380, h: 145, title: "PDF Exchange English", desc: "英文PDF・テキストから文を取り出し、日本語訳付きの学習カード、シャドーイング用テキスト、音声を作るWebアプリ" },
+      { kind: "ext", x: 30, y: 505, w: 200, h: 115, title: "Claude API", tech: "Anthropic", desc: "文の分割と日本語訳" },
+      { kind: "ext", x: 275, y: 505, w: 200, h: 115, title: "ElevenLabs API", desc: "英文の音声合成" },
+      { kind: "ext", x: 525, y: 505, w: 200, h: 115, title: "Google OAuth", desc: "ログイン（本人確認）" },
+      { kind: "ext", x: 770, y: 505, w: 200, h: 115, title: "Oxford Learner's Dictionaries", desc: "英英辞書のWebサイト" }
+    ],
+    edges: [
+      { pts: [[175, 160], [400, 265]], label: "教材を作る", tech: "HTTPS", at: [287, 212] },
+      { pts: [[500, 160], [500, 265]], label: "教材を作り、履歴を見る", tech: "HTTPS", at: [500, 212] },
+      { pts: [[825, 160], [600, 265]], label: "教材作成・音声読み上げ", tech: "HTTPS", at: [712, 212] },
+      { pts: [[380, 410], [130, 505]], label: "英文を翻訳", tech: "HTTPS・Tool Use", at: [255, 457] },
+      { pts: [[460, 410], [375, 505]], label: "音声を生成", tech: "HTTPS", at: [418, 457] },
+      { pts: [[540, 410], [625, 505]], label: "ログイン", tech: "OAuth 2.0", at: [582, 457] },
+      { pts: [[620, 410], [870, 505]], label: "単語の辞書を開く", tech: "リンク", at: [745, 457] }
+    ]
+  });
+  legend("legend-1", ["person", "system", "ext"]);
+
+  // ---------- Level 2: Containers ----------
+  render("d-container", {
+    boundaries: [{ x: 210, y: 175, w: 600, h: 670, title: "PDF Exchange English", tech: "ソフトウェアシステム", labelTop: true }],
+    boxes: [
+      { kind: "person", x: 250, y: 15, w: 240, h: 125, title: "学習者", desc: "未ログイン・ログイン済みの両方" },
+      { kind: "container", x: 250, y: 220, w: 260, h: 150, title: "Webアプリ（ブラウザ）", tech: "Next.js / React 19", desc: "ファイル読み込み、翻訳の進み具合、カード・シャドーイング表示、PDF出力。結果は sessionStorage に一時保存" },
+      { kind: "container", x: 250, y: 450, w: 260, h: 155, title: "アプリサーバー", tech: "Next.js 16 / Vercel Functions", desc: "テキスト抽出・OCR、翻訳、利用制限、翻訳チケット、認証、履歴の保存と表示" },
+      { kind: "container", db: true, x: 250, y: 690, w: 220, h: 125, title: "データベース", tech: "Neon Postgres", desc: "認証、教材と文、使用量、翻訳チケット" },
+      { kind: "container", x: 580, y: 690, w: 190, h: 125, title: "マイグレーション", tech: "Node.js スクリプト", desc: "SQLを番号順に実行し app_user を作る" },
+      { kind: "ext", x: 860, y: 200, w: 240, h: 95, title: "Oxford Learner's Dictionaries", desc: "英英辞書" },
+      { kind: "ext", x: 860, y: 330, w: 240, h: 95, title: "Google OAuth", desc: "ログイン" },
+      { kind: "ext", x: 860, y: 460, w: 240, h: 95, title: "Claude API", tech: "claude-haiku-4-5", desc: "翻訳" },
+      { kind: "ext", x: 860, y: 590, w: 240, h: 95, title: "ElevenLabs API", desc: "音声合成" },
+      { kind: "person", x: 860, y: 715, w: 240, h: 130, title: "運営者", desc: "ローカルから初回セットアップ" }
+    ],
+    edges: [
+      { pts: [[370, 140], [370, 220]], label: "使う", tech: "HTTPS", at: [370, 180] },
+      { pts: [[380, 370], [380, 450]], label: "API・画面を呼ぶ", tech: "JSON / HTTPS", at: [380, 410] },
+      { pts: [[360, 605], [360, 690]], label: "読み書き", tech: "SQL・app_user", at: [360, 648] },
+      { pts: [[580, 752], [470, 752]], label: "作成", tech: "所有者ロール", at: [525, 752] },
+      { pts: [[860, 790], [770, 770]], label: "実行", tech: "初回のみ", at: [815, 742] },
+      { pts: [[510, 250], [860, 247]], label: "単語の辞書ページを開く", tech: "新しいタブ", at: [685, 249] },
+      { pts: [[510, 472], [860, 377]], label: "Googleでログイン", tech: "OAuth 2.0", at: [685, 424] },
+      { pts: [[510, 527], [860, 507]], label: "文ごとに翻訳", tech: "HTTPS・Tool Use", at: [685, 517] },
+      { pts: [[510, 585], [860, 637]], label: "音声を生成", tech: "HTTPS", at: [685, 611] }
+    ]
+  });
+  legend("legend-2", ["person", "container", "ext", "boundary"]);
+
+  // ---------- Level 3: Server components ----------
+  const X = [30, 198, 366, 534, 702, 870, 1038], W = 150;
+  const A = (i, title, tech, desc) => ({ kind: "component", x: X[i], y: 185, w: W, h: 110, title, label: "コンポーネント", tech, desc });
+  const B = (i, title, tech, desc) => ({ kind: "component", x: X[i], y: 370, w: W, h: 115, title, label: "コンポーネント", tech, desc });
+  const cx = i => X[i] + W / 2;
+  render("d-component", {
+    boundaries: [{ x: 15, y: 145, w: 1190, h: 625, title: "アプリサーバー", tech: "コンテナ: Next.js 16" }],
+    boxes: [
+      { kind: "container", x: 430, y: 15, w: 360, h: 85, title: "Webアプリ（ブラウザ）", tech: "Next.js / React 19" },
+      A(0, "/api/extract", "Route Handler", "PDF/TXTから本文を取り出す"),
+      A(1, "/api/process", "Route Handler", "分割 / 1チャンクの翻訳"),
+      A(2, "/api/usage", "Route Handler", "今日の残り文字数"),
+      A(3, "/api/documents", "Route Handler", "履歴の保存・削除"),
+      A(4, "/history 画面", "Server Component", "履歴の一覧と詳細"),
+      A(5, "/api/tts", "Route Handler", "音声を作る"),
+      A(6, "/api/auth/[...all]", "Route Handler", "ログイン処理"),
+      B(0, "pdf-parser.ts", "pdf-parse・tesseract.js", "文字がないPDFはOCR"),
+      B(1, "llm.ts", "Anthropic SDK", "整形・分割・Claudeで翻訳"),
+      B(2, "translation-ticket", "SHA-256", "チケットの発行・使用・返金"),
+      B(3, "usage", "+limits / info / client-ip", "1日の文字数を予約"),
+      B(4, "documents.ts", "SQL・RLS", "教材と文の保存・一覧・削除"),
+      B(5, "access.ts", "許可リスト", "試験機能を使える人か"),
+      B(6, "elevenlabs.ts", "fetch", "英文を音声に変換"),
+      { kind: "component", x: 534, y: 575, w: 150, h: 100, title: "db.ts", tech: "Neon Pool", desc: "app_user の接続を共有" },
+      { kind: "component", x: 702, y: 575, w: 318, h: 100, title: "auth.ts", tech: "Better Auth", desc: "Googleログインとセッション（2時間）。全入口がセッション確認に使う" },
+      { kind: "ext", x: 178, y: 810, w: 190, h: 90, title: "Claude API" },
+      { kind: "container", db: true, x: 509, y: 805, w: 200, h: 100, title: "データベース", tech: "Neon Postgres" },
+      { kind: "ext", x: 771, y: 810, w: 180, h: 90, title: "Google OAuth" },
+      { kind: "ext", x: 1023, y: 810, w: 180, h: 90, title: "ElevenLabs API" }
+    ],
+    edges: [
+      { pts: [[610, 100], [610, 145]], label: "JSON / HTTPS", at: [610, 124] },
+      { pts: [[cx(0), 295], [cx(0), 370]] },
+      { pts: [[150, 295], [400, 370]] },
+      { pts: [[cx(1), 295], [cx(1), 370]] },
+      { pts: [[310, 295], [425, 370]] },
+      { pts: [[335, 295], [565, 370]] },
+      { pts: [[cx(2), 295], [600, 370]] },
+      { pts: [[640, 295], [745, 370]] },
+      { pts: [[cx(4), 295], [cx(4), 370]] },
+      { pts: [[cx(5), 295], [cx(5), 370]] },
+      { pts: [[990, 295], [1080, 370]] },
+      { pts: [[1080, 295], [1029, 330], [1029, 545], [1005, 575]] },
+      { pts: [[366, 420], [349, 420]] },
+      { pts: [[516, 420], [533, 420]] },
+      { pts: [[cx(4), 485], [cx(4), 520], [470, 520], [470, 486]] },
+      { pts: [[410, 485], [560, 575]] },
+      { pts: [[cx(3), 485], [cx(3), 575]] },
+      { pts: [[745, 485], [660, 575]] },
+      { pts: [[cx(1), 485], [cx(1), 810]], label: "翻訳", tech: "HTTPS", at: [cx(1), 740] },
+      { pts: [[609, 675], [609, 805]], label: "SQL", tech: "app_user", at: [609, 740] },
+      { pts: [[760, 675], [690, 810]] },
+      { pts: [[861, 675], [861, 810]], label: "OAuth 2.0", at: [861, 740] },
+      { pts: [[cx(6), 485], [cx(6), 810]], label: "HTTPS", at: [cx(6), 740] }
+    ]
+  });
+
+  // ---------- Level 3: Client components ----------
+  const C = (x, y, w, title, desc, h) => ({ kind: "component", x, y, w, h: h || 92, title, label: "Client Component", desc });
+  render("d-client", {
+    boundaries: [{ x: 15, y: 15, w: 1090, h: 470, title: "Webアプリ（ブラウザ）", tech: "コンテナ: Next.js / React 19" }],
+    boxes: [
+      C(40, 40, 210, "layout.tsx", "Header・UsageProvider を全画面に"),
+      C(290, 40, 220, "page.tsx（トップ）", "抽出→分割→翻訳→保存を順に呼ぶ"),
+      C(560, 40, 240, "/history/[id]", "SentenceResultView と DeleteDocumentButton"),
+      C(840, 40, 240, "UsageProvider", "/api/usage を1回取り全体で共有"),
+      C(40, 190, 210, "Header・AuthButton", "useSession で Google ログイン"),
+      C(290, 190, 220, "FileUploader・UsageNotice", "ファイル選択と残り文字数"),
+      C(560, 190, 240, "SentenceList", "カード一覧、10件区切りの目次、コピー"),
+      C(840, 190, 240, "ShadowingSheet", "短い文を1行にまとめた英文"),
+      C(290, 340, 220, "SentenceCard", "原文・訳・音声ボタン（/api/tts）"),
+      C(560, 340, 240, "DownloadPdfButton", "html2canvas＋jsPDF で40pt余白のPDF"),
+      C(840, 340, 240, "ClickableEnglishText", "単語ごとにクリックで辞書を開く")
+    ],
+    edges: [
+      { pts: [[145, 132], [145, 190]] },
+      { pts: [[250, 86], [290, 86]] },
+      { pts: [[400, 132], [400, 190]] },
+      { pts: [[460, 132], [600, 190]] },
+      { pts: [[490, 132], [880, 190]] },
+      { pts: [[680, 132], [680, 190]] },
+      { pts: [[760, 132], [900, 190]] },
+      { pts: [[600, 282], [440, 340]] },
+      { pts: [[680, 282], [680, 340]] },
+      { pts: [[900, 282], [760, 340]] },
+      { pts: [[960, 282], [960, 340]] },
+      { pts: [[400, 432], [400, 458], [960, 458], [960, 433]] }
+    ]
+  });
+  const svgC = document.getElementById("d-client");
+  [["→ /api/extract・/api/process・/api/documents", 290, 520], ["sessionStorage に結果を一時保存", 290, 540]].forEach(([s, x, y]) => {
+    const t = el("text", { x, y, class: "c4-label-tech" }, svgC); t.textContent = s;
+  });
+})();
+</script>
