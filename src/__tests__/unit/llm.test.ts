@@ -40,6 +40,23 @@ describe("processChunk: 課金されたかもしれない失敗は、返却さ�
     mocks.create.mockResolvedValue({ stop_reason: "tool_use", content: [] });
     await expect(processChunk("Hello.")).rejects.toBeInstanceOf(ClaudeResponseError);
   });
+
+  it("中断の合図で打ち切られたら ClaudeResponseError(生成と課金が進んでいるかもしれない)", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    mocks.create.mockRejectedValue(new Error("Request was aborted."));
+    await expect(processChunk("Hello.", { signal: controller.signal })).rejects.toBeInstanceOf(
+      ClaudeResponseError
+    );
+  });
+
+  it("中断されていない合図を渡しても、Claude が断った失敗は今までどおり普通の Error(未課金)", async () => {
+    const controller = new AbortController();
+    mocks.create.mockRejectedValue(new Error("overloaded"));
+    const error = await processChunk("Hello.", { signal: controller.signal }).catch((e) => e);
+    expect(error).not.toBeInstanceOf(ClaudeResponseError);
+    expect(mocks.create.mock.calls[0][1]).toEqual({ signal: controller.signal });
+  });
 });
 
 describe("maxTokensFor(出力の上限を chunk の長さに合わせる)", () => {
