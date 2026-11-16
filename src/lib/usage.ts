@@ -150,28 +150,37 @@ export async function reserveUsage(
   }
 }
 
-// 引数: 開始済みのトランザクション、予約情報 / 返り値: なし(予約した分を使用量から戻す)
+// 引数: 開始済みのトランザクション、予約情報、戻す量(省略時は予約した全額) / 返り値: なし(使用量から戻す)
 export async function refundUsageInTransaction(
   client: PoolClient,
-  reservation: Reservation
+  reservation: Reservation,
+  amount: number = reservation.amount
 ): Promise<void> {
+  if (!Number.isInteger(amount) || amount < 0 || amount > reservation.amount) {
+    throw new Error("refund amount must be an integer between 0 and the reserved amount");
+  }
+  if (amount === 0) return;
   for (const key of [...reservation.keys].sort()) {
     await client.query(
       `UPDATE usage
          SET amount = GREATEST(amount - $4::int, 0), updated_at = now()
        WHERE subject_key = $1::text AND day = $2::date AND kind = $3::text`,
-      [key, reservation.day, reservation.kind, reservation.amount]
+      [key, reservation.day, reservation.kind, amount]
     );
   }
 }
 
-// 引数: 予約情報 / 返り値: なし(予約した分を使用量から戻す。失敗してもログに残すだけ)
-export async function refundUsage(reservation: Reservation): Promise<void> {
+// 引数: 予約情報、戻す量(省略時は予約した全額) / 返り値: なし(使用量から戻す。失敗してもログに残すだけ)
+export async function refundUsage(
+  reservation: Reservation,
+  amount: number = reservation.amount
+): Promise<void> {
+  if (amount === 0) return;
   let client: PoolClient | undefined;
   try {
     client = await getPool().connect();
     await client.query(beginWithLockTimeout(getUsageLimits().lockTimeoutMs));
-    await refundUsageInTransaction(client, reservation);
+    await refundUsageInTransaction(client, reservation, amount);
     await client.query("COMMIT");
   } catch (error) {
     try {

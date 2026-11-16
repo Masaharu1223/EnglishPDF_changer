@@ -177,6 +177,34 @@ describe.skipIf(!db)("usage テーブルの予約・返却(本物のPostgres)", 
       await usage.refundUsage(res.reservation);
       expect((await usage.reserveUsage(u, "translate_chars", 1000)).ok).toBe(true);
     });
+
+    it("戻す量を指定すると、その分だけ戻る(個人の枠と全体の枠の両方)", async () => {
+      const u = user();
+      const res = await usage.reserveUsage(u, "translate_chars", 1000);
+      if (!res.ok) throw new Error("予約できるはず");
+      await usage.refundUsage(res.reservation, 300);
+      expect(await amount(`u:${sub(u)}`)).toBe(700);
+      expect(await amount("others:*")).toBe(700);
+    });
+
+    it("戻す量が0なら、何も変えない", async () => {
+      const u = user();
+      const res = await usage.reserveUsage(u, "translate_chars", 400);
+      if (!res.ok) throw new Error("予約できるはず");
+      await usage.refundUsage(res.reservation, 0);
+      expect(await amount(`u:${sub(u)}`)).toBe(400);
+    });
+
+    it("予約した量より多くは戻さない(エラーをログに残し、何も変えない)", async () => {
+      const u = user();
+      const res = await usage.reserveUsage(u, "translate_chars", 400);
+      if (!res.ok) throw new Error("予約できるはず");
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      await usage.refundUsage(res.reservation, 401);
+      expect(errorSpy).toHaveBeenCalled();
+      errorSpy.mockRestore();
+      expect(await amount(`u:${sub(u)}`)).toBe(400);
+    });
   });
 
   describe("同時実行(この仕組みの肝)", () => {

@@ -23,7 +23,7 @@ export function maxTokensFor(chunk: string): number {
   return Math.min(MAX_OUTPUT_TOKENS, Math.ceil(chunk.length * 2.0) + 256);
 }
 
-interface SentencePair {
+export interface SentencePair {
   original: string;
   translation: string;
 }
@@ -99,8 +99,11 @@ export function splitIntoChunks(text: string, maxChars = 1500): string[] {
   return chunks;
 }
 
-// 引数: 翻訳する chunk の文字列 / 返り値: 原文と日本語訳の組の配列
-export async function processChunk(chunk: string): Promise<SentencePair[]> {
+// 引数: 翻訳する chunk の文字列、任意の中断の合図 / 返り値: 原文と日本語訳の組の配列
+export async function processChunk(
+  chunk: string,
+  options: { signal?: AbortSignal } = {}
+): Promise<SentencePair[]> {
   let response: Anthropic.Message;
   try {
     response = await anthropic.messages.create({
@@ -122,8 +125,11 @@ Text:
 ${chunk}`,
         },
       ],
-    });
+    }, { signal: options.signal });
   } catch (error) {
+    if (options.signal?.aborted) {
+      throw new ClaudeResponseError("Claude call was aborted");
+    }
     if (error instanceof Anthropic.APIConnectionError) {
       throw new ClaudeResponseError(`Claude connection failed: ${error.message}`);
     }
