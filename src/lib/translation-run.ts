@@ -17,6 +17,7 @@ export interface RunInput {
   subject: UsageSubject;
   deadlineAt: number;
   onChunk: (index: number, sentences: SentencePair[]) => void | Promise<void>;
+  onReserved?: () => void;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
 }
@@ -37,6 +38,12 @@ interface ChunkOutcome {
   sentences: SentencePair[] | null;
   keepMain: boolean;
   cutByDeadline: boolean;
+}
+
+// 引数: チャンクの配列 / 返り値: チャンクごとの課金額(文字数。ただし最低課金より少なくはしない)
+export function chargesFor(chunks: string[]): number[] {
+  const { minChargeChars } = getUsageLimits();
+  return chunks.map((chunk) => Math.max(chunk.length, minChargeChars));
 }
 
 // 引数: ms(待つミリ秒) / 返り値: 待ち終わると解決する Promise
@@ -109,7 +116,7 @@ async function translateChunk(
   return outcomeOf(second, signal, true);
 }
 
-// 引数: チャンク・使用量の対象・締め切り・1チャンクごとの通知 / 返り値: 予約の失敗、または翻訳の結果
+// 引数: チャンク・使用量の対象・締め切り・1チャンクごとの通知・予約できたときの通知 / 返り値: 予約の失敗、または翻訳の結果
 export async function runTranslation(input: RunInput): Promise<RunResult> {
   const { chunks, subject, deadlineAt, onChunk } = input;
   const now = input.now ?? Date.now;
@@ -122,14 +129,18 @@ export async function runTranslation(input: RunInput): Promise<RunResult> {
     return { ok: true, status: "incomplete", sentences: [], failedChunks: 0, notProcessed: chunks.length };
   }
 
-  const { minChargeChars } = getUsageLimits();
-  const charges = chunks.map((chunk) => Math.max(chunk.length, minChargeChars));
+  const charges = chargesFor(chunks);
   const total = charges.reduce((sum, charge) => sum + charge, 0);
   const signal = AbortSignal.timeout(timerDelay(deadlineAt - now()));
   const pastDeadline = () => signal.aborted || now() >= deadlineAt;
 
   const reserved = await reserveWithRetry(subject, total, sleep);
   if (!reserved.ok) return { ok: false, reason: reserved.reason };
+  try {
+    input.onReserved?.();
+  } catch (error) {
+    console.error("onReserved failed", error);
+  }
 
   const sentences: SentencePair[] = [];
   let kept = 0;

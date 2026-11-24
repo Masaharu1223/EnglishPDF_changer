@@ -342,39 +342,41 @@ HTTP から独立した関数として作る(あとでキューに移すとき�
 
 流れ: 入力の確認 → ログインを1回だけ確認 → (ファイルなら)本文の取り出し → 分割と長さの確認 → 使用量をまとめて予約 → ここまでの失敗は 4xx で返す → 200 で NDJSON(進み具合とハートビート)を流しながら翻訳 → 最後に全部の文をまとめて `done` で返す → サーバーで保存。
 
-- [ ] 1. worktree 作成、`.env.local` のコピー、`npm ci`(作成とコピーは済み)
-- [ ] 2. `src/lib/translation-run.ts`: 予約できたときに呼ぶ `onReserved` を `RunInput` に足す(要確認 A)。API は「`onReserved` が呼ばれる」か「予約の失敗が返る」の早い方を待ち、前者ならストリームを始め、後者なら 429 を返す
-- [ ] 3. `src/lib/usage-response.ts`(新規): `/api/process` の `limitResponse` / `busyResponse` を移し、両方のルートから使う(要確認 B)。429 の本文は `reason`・`error`(文言)・`resetAt` に加えて、必要な文字数 `required` を返す(PR 3 で今の「上限を超えます」の文言を出すため)
-- [ ] 4. `src/lib/translation-events.ts`(新規): 流すイベントの型。画面(PR 3)からも読み込む
+- [x] 1. worktree 作成、`.env.local` のコピー、`npm ci`
+- [x] 2. `src/lib/translation-run.ts`: 予約できたときに呼ぶ `onReserved` を `RunInput` に足す(要確認 A)。API は「`onReserved` が呼ばれる」か「予約の失敗が返る」の早い方を待ち、前者ならストリームを始め、後者なら 429 を返す
+- [x] 3. `src/lib/usage-response.ts`(新規): `/api/process` の `limitResponse` / `busyResponse` を移し、両方のルートから使う(要確認 B)。429 の本文は `reason`・`error`(文言)・`resetAt` に加えて、必要な文字数 `required` を返す(PR 3 で今の「上限を超えます」の文言を出すため)
+- [x] 4. `src/lib/translation-events.ts`(新規): 流すイベントの型。画面(PR 3)からも読み込む
   - `start`: チャンクの数
   - `progress`: 終わったチャンクの数(文は入れない)。今の画面の進み具合の % を保つため(要確認 E)
   - `ping`: 約15秒、何も送っていないときだけ(数分つながったままになるので、途中の機器に通信を切られないようにするため)
   - `done`: status(complete / incomplete / failed / aborted)、**全部の文の一覧**、失敗したチャンクの数、処理しなかったチャンクの数、保存した教材の id(保存しなければ null)、保存の失敗
   - チャンクごとに文を送る `chunk` は作らない(#63。後日、番号つきで足す)
   - `error`: 想定外の例外のときの文言
-- [ ] 5. `src/app/api/translations/route.ts`(新規)
-  - [ ] 5a. 入力は JSON の1つの形: `{ title, sourceType, text }` か `{ title, fileName, fileData(base64) }`(要確認 C)。ファイルの種類は名前から決める。title は今の保存 API と同じ上限
-  - [ ] 5b. `getSession` はここで1回だけ。使用量の対象(ユーザー / IP)と保存先のユーザーを決める
-  - [ ] 5c. 締め切り `deadlineAt` = リクエストの受付時刻 + 240秒。基準は本文の取り出しより前(PDF の解析の時間も含めて、300秒に収めるため。あとで「取り出しの後」に動かさない)
-  - [ ] 5d. `cleanText` → 分割。整えた本文が30,000字を超えたら、予約の前に 413(`reason: "too_long"`、上限の値つき)
-  - [ ] 5e. 予約の失敗(personal / pool / busy)は 429。本文が空・形式違いは 400
-  - [ ] 5f. `export const maxDuration = 300`。ヘッダーは `Content-Type: application/x-ndjson`、`Cache-Control: no-cache, no-transform`
-  - [ ] 5g. 翻訳の処理を `after()` に渡す(レスポンスを返す前に呼ぶ)。画面との通信が切れても最後まで動き、保存まで終える。ログインしていない人でも、切れたことを理由に止めない(#63)
-  - [ ] 5h. ストリームへの書き込みは try/catch で包む(通信が切れたあとの書き込みで例外が出ても、翻訳と保存を止めない)
-  - [ ] 5i. 保存は、status が complete・ログイン中・文が1つ以上のときだけ。保存の前に、文の長さを `document-limits` で確かめる。保存の失敗は `done` に入れて返す(例外にしない)
-  - [ ] 5j. 翻訳チケット(`X-Translation-Ticket`)は見ない
-- [ ] 6. テスト
-  - [ ] 6a. 単体: `onReserved` が予約の成功のときだけ呼ばれる
-  - [ ] 6b. API(`runTranslation` と `saveDocument` を偽物にし、NDJSON を読む): 400 / 413 / 429(personal・pool・busy)/ イベントの順番(start → progress → done)/ `done` に全部の文が入る / complete のときだけ保存 / 未ログインは保存しない / 保存の失敗が `done` に入る / 想定外の例外で `error` / 締め切りの時刻 / 書き込みの失敗で止まらない
-  - [ ] 6c. `/api/process` の 429 が今までと同じ(移したあとも)
+- [x] 5. `src/app/api/translations/route.ts`(新規)
+  - [x] 5a. 入力は JSON の1つの形: `{ title, text }` か `{ title, fileName, fileData(base64) }`(C で決定)。入力の種類(sourceType)は送らせず、本文なら paste、ファイルなら拡張子から決める(実装時に変更: 中身と食い違う値を保存させないため)。title は今の保存 API と同じ上限
+  - [x] 5b. `getSession` はここで1回だけ。使用量の対象(ユーザー / IP)と保存先のユーザーを決める
+  - [x] 5c. 締め切り `deadlineAt` = リクエストの受付時刻 + 240秒。基準は本文の取り出しより前(PDF の解析の時間も含めて、300秒に収めるため。あとで「取り出しの後」に動かさない)
+  - [x] 5d. `cleanText` → 分割。整えた本文が30,000字を超えたら、予約の前に 413(`reason: "too_long"`、上限の値つき)
+  - [x] 5e. 予約の失敗(personal / pool / busy)は 429。本文が空・形式違いは 400
+  - [x] 5f. `export const maxDuration = 300`。ヘッダーは `Content-Type: application/x-ndjson`、`Cache-Control: no-cache, no-transform`
+  - [x] 5g. 翻訳の処理を `after()` に渡す(レスポンスを返す前に呼ぶ)。画面との通信が切れても最後まで動き、保存まで終える。ログインしていない人でも、切れたことを理由に止めない(#63)
+  - [x] 5h. ストリームへの書き込みは try/catch で包む(通信が切れたあとの書き込みで例外が出ても、翻訳と保存を止めない)
+  - [x] 5i. 保存は、status が complete・ログイン中・文が1つ以上のときだけ。保存の前に、文の長さを `document-limits` で確かめる。保存の失敗は `done` に入れて返す(例外にしない)
+  - [x] 5j. 翻訳チケット(`X-Translation-Ticket`)は見ない
+- [x] 6. テスト
+  - [x] 6a. 単体: `onReserved` が予約の成功のときだけ呼ばれる
+  - [x] 6b. API(`runTranslation` と `saveDocument` を偽物にし、NDJSON を読む): 400 / 413 / 429(personal・pool・busy)/ イベントの順番(start → progress → done)/ `done` に全部の文が入る / complete のときだけ保存 / 未ログインは保存しない / 保存の失敗が `done` に入る / 想定外の例外で `error` / 締め切りの時刻 / 書き込みの失敗で止まらない
+  - [x] 6c. `/api/process` の 429 が今までと同じ(移したあとも)
 - [ ] 7. 実際に動かす確認(要確認 D)
   - [ ] 7a. Vercel のプレビューで、未ログインのまま短い文章を翻訳し、イベントが順に届くことと、ログに done が出ることを確かめる(ユーザーの Chrome を使う)
   - [ ] 7b. ログインして保存までの確認
-- [ ] 8. `docs/design-notes.md` に理由を書く(予約を先に済ませてから流す理由、締め切りの基準、通信が切れたあとの書き込み)
+- [x] 8. `docs/design-notes.md` に理由を書く(予約を先に済ませてから流す理由、締め切りの基準、通信が切れたあとの書き込み)
 - [ ] 9. tsc・lint・テスト(DB 統合を含む)・ビルド、`code-reviewer` のレビュー
+  - 2026-11-24: tsc・lint・単体 296件・DB 統合 48件は通過。ビルドはコンパイルまで成功し、Next.js 16.4.3 の脆弱性(moderate、16.4.5 で修正)の警告で止まる(main でも同じ。Next.js の更新は別 PR で相談)
+  - `code-reviewer`: Approve(CRITICAL・HIGH なし)。直した指摘: 壊れたファイルを 400 に / `after()` の登録を翻訳の開始より前に / テストの補強(start の順番、予約なしの経路、タイマーの後片付け、after の登録)。直さなかった指摘: 強制終了での返金漏れ(設計の限界、#56)、整える前の原文が保存上限を超える場合(まれ)、同時実行数の制限なし(予約で上限は守られる)
 - [ ] 10. PR → マージ(ユーザー)
 
-## PR 2 で確認したいこと
+## PR 2 で確認したいこと(2026-11-24: A・B・C・E は案どおり、D は (1) に決定)
 - A. 予約の結果を API に知らせる方法: `runTranslation` に `onReserved` を足す(案)。予約と翻訳を2つの関数に分ける方法もあるが、予約の返金を1か所で扱えなくなるため、足す方にしたい。
 - B. 429 を作る関数を共通の場所に移す(案)。PR 5 で `/api/process` を消すまで、2つのルートの文言がずれないようにするため。
 - C. ファイルは今と同じ base64 の JSON で受け取る(案)。base64 で約1.3倍になるため、PDF は約3.4MBまで(今と同じ)。multipart で送る形は、あとで考える。

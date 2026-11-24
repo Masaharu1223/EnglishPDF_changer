@@ -20,7 +20,7 @@ vi.mock("@/lib/usage", () => ({
   refundUsage: mocks.refundUsage,
 }));
 
-import { BUSY_RETRY_DELAY_MS, runTranslation, type RunInput } from "@/lib/translation-run";
+import { BUSY_RETRY_DELAY_MS, chargesFor, runTranslation, type RunInput } from "@/lib/translation-run";
 
 const subject = { type: "user", userId: "u1" } as const;
 const FAR = Date.now() + 60_000;
@@ -320,5 +320,54 @@ describe("締め切りの見張り", () => {
     for (const result of [far, fractional, infinite]) {
       expect(result.ok && result.status).toBe("complete");
     }
+  });
+});
+
+describe("予約できたときの通知(onReserved)", () => {
+  it("予約が成功したら1回だけ呼ぶ。最初の Claude の呼び出しより前に呼ぶ", async () => {
+    const order: string[] = [];
+    mocks.processChunk.mockImplementation(async (chunk: string) => {
+      order.push("claude");
+      return sentencesOf(chunk);
+    });
+    const onReserved = vi.fn(() => order.push("reserved"));
+    await runTranslation(input({ onReserved }));
+    expect(onReserved).toHaveBeenCalledTimes(1);
+    expect(order[0]).toBe("reserved");
+  });
+
+  it.each(["personal", "pool", "busy"] as const)("予約に失敗したら(%s)呼ばない", async (reason) => {
+    mocks.reserveUsage.mockResolvedValue({ ok: false, reason });
+    const onReserved = vi.fn();
+    await runTranslation(input({ onReserved }));
+    expect(onReserved).not.toHaveBeenCalled();
+  });
+
+  it("onReserved が例外を投げても、翻訳を続けて、予約は正しく返す", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const onReserved = vi.fn(() => {
+      throw new Error("boom");
+    });
+    const result = await runTranslation(input({ onReserved }));
+    expect(result).toMatchObject({ ok: true, status: "complete" });
+    expect(mocks.processChunk).toHaveBeenCalledTimes(3);
+    expect(await refundedFromMain()).toBe(0);
+  });
+
+  it("onReserved を渡さなくても動く(PR 1 までの呼び方)", async () => {
+    expect(await runTranslation(input())).toMatchObject({ ok: true, status: "complete" });
+  });
+});
+
+describe("課金額の計算(chargesFor)", () => {
+  it("チャンクごとに max(文字数, 最低課金) を返す", () => {
+    expect(chargesFor(["a".repeat(1000), "b".repeat(300)])).toEqual([1000, 500]);
+  });
+
+  it("予約する量は、chargesFor の合計と同じ", async () => {
+    const chunks = input().chunks;
+    await runTranslation(input());
+    const total = chargesFor(chunks).reduce((a, b) => a + b, 0);
+    expect(mocks.reserveUsage).toHaveBeenCalledWith(subject, "translate_chars", total);
   });
 });

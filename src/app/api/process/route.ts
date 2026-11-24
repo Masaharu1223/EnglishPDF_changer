@@ -6,15 +6,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { ClaudeResponseError, cleanText, processChunk, splitIntoChunks } from "@/lib/llm";
 import { getUsageLimits } from "@/lib/usage-limits";
-import {
-  BUSY_MESSAGE,
-  limitMessage,
-  nextResetAtIso,
-  refundUsage,
-  reserveUsage,
-  subjectFor,
-  type UsageSubject,
-} from "@/lib/usage";
+import { refundUsage, reserveUsage, subjectFor } from "@/lib/usage";
+import { busyResponse, limitResponse } from "@/lib/usage-response";
 import {
   TICKET_HEADER,
   TICKET_INVALID_BODY,
@@ -26,24 +19,6 @@ import { startTranslationResponse } from "@/lib/translation-ticket-response";
 type ChunkReservation =
   | { ok: true; refund: () => Promise<void> }
   | { ok: false; response: NextResponse };
-
-// 引数: 上限に達した理由、使用量の対象 / 返り値: 429 の応答(リセット時刻と Retry-After つき)
-function limitResponse(reason: "personal" | "pool", subject: UsageSubject): NextResponse {
-  const resetAt = nextResetAtIso();
-  const retryAfter = Math.max(1, Math.ceil((new Date(resetAt).getTime() - Date.now()) / 1000));
-  return NextResponse.json(
-    { error: limitMessage(subject, reason), reason, resetAt },
-    { status: 429, headers: { "Retry-After": String(retryAfter) } }
-  );
-}
-
-// 引数: なし / 返り値: DB が混み合っているときの 429 の応答
-function busyResponse(): NextResponse {
-  return NextResponse.json(
-    { error: BUSY_MESSAGE, reason: "busy" },
-    { status: 429, headers: { "Retry-After": "5" } }
-  );
-}
 
 // 引数: request(リクエスト)、翻訳するチャンク / 返り値: 予約の成否(成功なら返金の関数、失敗なら返す応答)
 async function reserveForChunk(request: NextRequest, chunk: string): Promise<ChunkReservation> {
