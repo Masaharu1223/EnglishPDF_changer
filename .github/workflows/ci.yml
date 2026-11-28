@@ -24,10 +24,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # 本番(Vercel)に合わせて Node 24。vitest 5 の要件(22.12 以上)も満たす
+      # Node の版は .nvmrc(24)にそろえる。本番(Vercel)は package.json の engines で同じ 24 を使う
       - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: npm
 
       - name: 依存パッケージを入れる(package-lock.json のとおりに)
